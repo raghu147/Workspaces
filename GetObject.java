@@ -109,7 +109,8 @@ public class GetObject {
 						String dryBulbTemp=splits[8];
 
 						//int temperature = Integer.parseInt(dryBulbTemp);
-						if(!dryBulbTemp.isEmpty()&& !dryBulbTemp.equals("-")){
+						if(!dryBulbTemp.isEmpty()&& !dryBulbTemp.startsWith("-")){
+							System.out.println(dryBulbTemp+"dry");
 							Double temperature = Double.parseDouble(dryBulbTemp);
 							//System.out.print(temperature);
 							int server = 0;
