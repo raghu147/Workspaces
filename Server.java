@@ -81,7 +81,7 @@ public class Server extends Thread{
 
 			while(true)
 			{
-				System.out.println("inside infinite while loop");
+				//System.out.println("inside infinite while loop");
 				s = serverSock.accept();
 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
 				String line = inFromClient.readLine();
@@ -153,14 +153,11 @@ public class Server extends Thread{
 							System.out.println("Content-Type: "  + 
 									s3object.getObjectMetadata().getContentType());
 
-							System.out.println(count);
-							count++;
 							// Get a range of bytes from an object.
 
 							GetObjectRequest rangeObjectRequest = new GetObjectRequest(
 									bucketName, bucketKeys.get(i));
 							rangeObjectRequest.setRange(0, 10);
-							//S3Object objectPortion = s3Client.getObject(rangeObjectRequest);
 
 							System.out.println("Printing bytes retrieved.");
 							System.out.println(s3object.getObjectContent()+"filename");
@@ -169,18 +166,18 @@ public class Server extends Thread{
 							InputStreamReader decoder = new InputStreamReader(gzin);
 							reader = new BufferedReader(decoder);
 							String readline;
-							double start = Double.parseDouble(rangeForCurrentServer.split("-")[0]);
-							double end =  Double.parseDouble(rangeForCurrentServer.split("-")[1]);
-							System.out.println("Before while");
+							double start = Double.parseDouble(rangeForCurrentServer.split("=")[0]);
+							double end =  Double.parseDouble(rangeForCurrentServer.split("=")[1]);
+							//System.out.println("Before while");
 							while((readline = reader.readLine()) != null) {
-								System.out.println("Inside while");
+								//System.out.println("Inside while");
 								if(!readline.startsWith("Wban Number")){
 
 									String splits[]=readline.split(",");
 									if(splits.length>=8){
 										String dryBulbTemp=splits[8];
 
-										if(!dryBulbTemp.isEmpty()&& !dryBulbTemp.startsWith("-")){
+										if(!dryBulbTemp.isEmpty()&& isDouble(dryBulbTemp)){
 											Double temperature = Double.parseDouble(dryBulbTemp);
 											if(temperature >= start && temperature <= end)
 												tempList.add(temperature);
@@ -190,7 +187,7 @@ public class Server extends Thread{
 									}
 								}
 							}
-							System.out.println("After while");
+							//System.out.println("After while");
 							s3object.close();
 						}
 
@@ -212,7 +209,7 @@ public class Server extends Thread{
 								"such as not being able to access the network.");
 						System.out.println("Error Message: " + ace.getMessage());
 					} catch(Exception e){
-						System.out.println(e);
+						e.printStackTrace();
 					}
 
 					tempList.addAll(tempListFromOtherServer);
@@ -236,20 +233,30 @@ public class Server extends Thread{
 		}
 
 	}
+	
+	private static boolean isDouble(String dryBulbTemp) {
+		// TODO Auto-generated method stub
+		try {
+			Double.parseDouble(dryBulbTemp);
+			return true;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
 
 	public void sendToOtherServer(double temp) throws UnknownHostException, IOException
 	{
 		for(int s : rangeMap.keySet())
 		{
 			String r_for_s = rangeMap.get(s);
-			double start_for_s = Double.parseDouble(r_for_s.split("-")[0]);
-			double end_for_s = Double.parseDouble(r_for_s.split("-")[1]);
+			double start_for_s = Double.parseDouble(r_for_s.split("=")[0]);
+			double end_for_s = Double.parseDouble(r_for_s.split("=")[1]);
 			if((start_for_s <= temp) && (temp <= end_for_s))
 			{
-				if(ser_port_hash.containsKey(s)){
+				/*if(ser_port_hash.containsKey(s)){
 					dispatchMessageToServer(ser_port_hash.get(s), "SEND_TEMP_VALUE:" + temp);
 					//dispatchMessageToServer(ser_port_hash.get(s), "FIN_SENDING_DATA:");
-				}
+				}*/
 				System.out.println("Sending to server: " + s + "with port "+ser_port_hash.get(s)+" and the range is: " +r_for_s);
 			}
 		}
@@ -257,7 +264,7 @@ public class Server extends Thread{
 
 	public static void dispatchMessageToServer(int port, String message) throws UnknownHostException, IOException
 	{
-		System.out.println("In dispatch.....");
+		//System.out.println("In dispatch.....");
 		ServerMessage obj = new ServerMessage(port,message+"\n");
 		Thread sendThread = new Thread(obj);
 		sendThread.run();
@@ -281,6 +288,7 @@ class ServerMessage extends Thread{
 		Socket clientSocket = new Socket("localhost",port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');
+		System.out.println("bytes written......");
 		clientSocket.close(); 
 
 	}
