@@ -1,8 +1,5 @@
-import java.io.BufferedReader;
 import java.io.DataOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -13,9 +10,8 @@ public class Cluster {
 
 	public static void main(String arg[]) throws UnknownHostException, IOException{
 
-		String inputFile = "data.txt";
 		String range;
-		String server_port_Numbers;
+		String server_port="";
 
 		// 4 0 11000 12000 13000 14000 
 		int totalServers = Integer.parseInt(arg[0]);
@@ -26,83 +22,30 @@ public class Cluster {
 		for(int i = 2; i <  arg.length;i++){
 			serverPortList.add(Integer.parseInt(arg[i]));
 		}
+		
+		for(int i = 0; i < totalServers; i++)
+		{
+			server_port = server_port + i + "-" + serverPortList.get(i) + ",";
+		}
+		server_port = server_port.substring(0, server_port.length() - 1);
 
-
-		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber));	
+		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber, totalServers));	
 
 		t1.start();
 
-
-		// Det Range
-		List<String> rangeString = new ArrayList<String>();
-
-		
-
 		if(serverNumber == 0){
 
-			// Input file
-			// loop
-			//rangeString.add("0.0,5.0");
-			//rangeString.add("6.0,10.0");
+			server_port = "0-18003,1-18004";
 			range = "0#0.0-50.0,1#51.0-100.0";
-			server_port_Numbers = "0-19001,1-19101";
-			
-
-			BufferedReader bufferedReader = null;
-			FileReader fileReader = null;
-			
-			/*for(int port : serverPortList)
-			{
-				dispatchSendMessage(port, "SERVER_PORT_LIST:"+server_port_Numbers);
-			}*/
 			
 			for(int port : serverPortList)
-			{
-				dispatchSendMessage(port, "RANGE:"+range);
-			}
-			for(int i = 0;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverPortList.get(i),"FIN_SENDING_DATA:");
-
+				dispatchSendMessage(port, "SERVER_PORT_LIST:"+server_port);
 			
-			/*try {
-				fileReader = new FileReader(inputFile);
-
-				bufferedReader = new BufferedReader(fileReader);
-				String line;
-
-				while((line = bufferedReader.readLine()) != null) {
-
-					int temperature = Integer.parseInt(line);
-
-					int server = 0;
-					for(String r : rangeString){
-
-						double start = Double.parseDouble(r.split(",")[0]);
-						double end =  Double.parseDouble(r.split(",")[1]);
-
-						if(temperature > start && temperature < end){
-
-							int sendToPort = serverPortList.get(server);
-							dispatchSendMessage(sendToPort,"FROM_SERVER:"+temperature);
-							break;
-						}
-
-						server ++;
-					}
-
-				}
-				
-				for(int i = 0;i  <  serverPortList.size(); i++)
+			for(int port : serverPortList)
+				dispatchSendMessage(port, "RANGE:"+range);
+			
+			for(int i = 0;i  <  serverPortList.size(); i++)
 				dispatchSendMessage(serverPortList.get(i),"FIN_SENDING_DATA:");
-
-
-			}   
-			catch(Exception e){
-				
-			}
-
-			bufferedReader.close();    
-			fileReader.close();*/
 
 		}
 
@@ -116,7 +59,7 @@ public class Cluster {
 		sendThread.run();
 		obj.send();
 	}
-	
+
 	public static void dispatchSendObject(int port,List<String>  range) throws UnknownHostException, IOException{
 		
 		Client obj = new Client(port, range);
@@ -146,14 +89,11 @@ class Client extends Thread{
 		this.range = (ArrayList<String>) range;
 	}
 
-
 	public void send()throws UnknownHostException, IOException {
-
 		Socket clientSocket = new Socket("localhost",port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');
-		clientSocket.close(); 
-
+		clientSocket.close();
 	}
 	public void sendObject()throws UnknownHostException, IOException {
 
