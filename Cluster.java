@@ -1,9 +1,7 @@
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -33,10 +31,7 @@ public class Cluster {
 	static Set<Double> sampleTempList = new HashSet<Double>();
 	public static void main(String arg[]) throws UnknownHostException, IOException{
 
-
-		String inputFile = "data.txt";
 		String range="";
-		String server_port_Numbers;
 		String server_port="";
 
 
@@ -55,31 +50,17 @@ public class Cluster {
 		}
 		server_port = server_port.substring(0, server_port.length() - 1);
 
-		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber, totalServers));	
+		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber,totalServers));	
+
 		t1.start();
-
-
-		// Det Range
-		List<String> rangeString = new ArrayList<String>();
-
-
-
-
-
-
 
 		/* Pass Ranges */
 		try{
 
 			if(serverNumber == 0){
-
-
 				/* Determine Ranges */
-
-
 				try {
-					//System.out.println("Downloading an object");
-
+					
 					/* Get Keys */
 					ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
 							.withBucketName(bucketName)
@@ -113,61 +94,40 @@ public class Cluster {
 						listObjectsRequest.setMarker(objectListing.getNextMarker());
 					} while (objectListing.isTruncated());
 
-
-
-
-
-
 					/* Read from each key */
 					for(int i=0;i<sampleKeys.size();i++){
 
 						S3Object s3object = s3Client.getObject(new GetObjectRequest(
 								bucketName, sampleKeys.get(i)));
-						System.out.println("Content-Type: "  + 
-								s3object.getObjectMetadata().getContentType());
-
-
+						
 						// Get a range of bytes from an object.
 
 						GetObjectRequest rangeObjectRequest = new GetObjectRequest(
 								bucketName, sampleKeys.get(i));
 						rangeObjectRequest.setRange(0, 10);
-						//S3Object objectPortion = s3Client.getObject(rangeObjectRequest);
-
-						System.out.println("Printing bytes retrieved.");
-						System.out.println(sampleKeys.get(i));
-
+						
 						GZIPInputStream gzin = new GZIPInputStream(s3object.getObjectContent());
 						InputStreamReader decoder = new InputStreamReader(gzin);
 						reader = new BufferedReader(decoder);
 						String line;
 
-						//System.out.println("Before while");
 						while((line = reader.readLine()) != null) {
 
 							if(!line.startsWith("Wban Number")){
-								//System.out.println(line);
-
+								
 								String splits[]=line.split(",");
 								if(splits.length>=8){
 									String dryBulbTemp=splits[8];
-									//System.out.println(dryBulbTemp);
-									//int temperature = Integer.parseInt(dryBulbTemp);
+									
 									if(!dryBulbTemp.isEmpty()&& isDouble(dryBulbTemp)){
 										Double temperature = Double.parseDouble(dryBulbTemp);
-
-										//System.out.println(temperature);
-
 										sampleTempList.add(temperature);
-
 									}
 								}
 							}
 
 						}
-						//System.out.println(sampleTempList+"set");
 						s3object.close();
-						//System.out.println("After while");
 					}
 
 				} catch (AmazonServiceException ase) {
@@ -189,16 +149,11 @@ public class Cluster {
 					System.out.println("Error Message: " + ace.getMessage());
 				}
 
-
-
-
 				List<Double> sampleList = new ArrayList<Double>(sampleTempList);
 				Collections.sort(sampleList);
-				System.out.println(sampleList);
 
 
 				int totalLength = sampleList.size();
-				System.out.println("total length="+totalLength);
 				int factor = totalLength/totalServers;
 
 				int startIndex=0;
@@ -215,36 +170,21 @@ public class Cluster {
 					}
 					endIndex=factor*i+factor;
 
-					//range = "0#0.0-50.0,1#51.0-100.0";
-					range = range+i+"#"+sampleList.get(startIndex)+"-"+sampleList.get(endIndex)+",";
+					//range = "0#0.0=50.0,1#51.0=100.0";
+					range = range+i+"#"+sampleList.get(startIndex)+"="+sampleList.get(endIndex)+",";
 				}
 				range=range.substring(0,range.length()-1);
-				System.out.println(range);
-				System.out.println(server_port);
 
-
-
-
-
-
-				BufferedReader bufferedReader = null;
-				FileReader fileReader = null;
-
-				/*for(int port : serverPortList)
-			{
-				dispatchSendMessage(port, "SERVER_PORT_LIST:"+server_port_Numbers);
-			}*/
-				/*for(int port : serverPortList)
+			
+				for(int port : serverPortList)
 					dispatchSendMessage(port, "SERVER_PORT_LIST:"+server_port);
-
 				for(int port : serverPortList)
 				{
 					dispatchSendMessage(port, "RANGE:"+range);
 				}
 				for(int i = 0;i  <  serverPortList.size(); i++)
 					dispatchSendMessage(serverPortList.get(i),"FIN_SENDING_DATA:");
-
-				 */
+				 
 
 			} 
 		}catch(Exception e){
