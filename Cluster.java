@@ -55,8 +55,7 @@ public class Cluster {
 		}
 		server_port = server_port.substring(0, server_port.length() - 1);
 
-		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber));	
-
+		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber, totalServers));	
 		t1.start();
 
 
