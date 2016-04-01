@@ -9,7 +9,7 @@
 rm instance.txt
 rm publicDNS.txt
 
-instance_id=$(aws ec2 run-instances --key key --count 2 --security-groups my-sg2 --instance-type t1.micro --image-id ami-9dbea4fc --output text --query 'Instances[*].InstanceId')
+instance_id=$(aws ec2 run-instances --key key --count $1 --security-groups my-sg2 --instance-type t2.micro --image-id ami-c229c0a2 --output text --query 'Instances[*].InstanceId')
 
 echo $instance_id > instance.txt
 
@@ -17,14 +17,15 @@ publicDNS=$(aws ec2 describe-instances --instance-id $instance_id  --query 'Rese
 
 echo $publicDNS > publicDNS.txt
 
-listOfDNS="\"$publicDNS\""
+listOfDNS="$publicDNS"
 
 echo $listOfDNS
 
-#scp -i "key.pem" SampleFile.txt ubuntu@$publicDNS:~
+sleep 120
 
 for i in $(echo $listOfDNS | tr " " "\n")
 do
-  scp -i "key.pem" SampleFile.txt ubuntu@$i:~
+  scp -i "key.pem" SampleFile.txt ec2-user@$i:~
+  sleep 120
 done
 
