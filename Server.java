@@ -306,7 +306,7 @@ class ReadServer extends Thread{
 			{
 				if(Server.ser_port_hash.containsKey(s)){
 					try{
-						Socket clientSocket = new Socket(Server.ser_port_hash.get(s).split("-")[1], Integer.parseInt(Server.ser_port_hash.get(s).split("-")[0]));
+						Socket clientSocket = new Socket(Server.ser_port_hash.get(s).split("#")[1], Integer.parseInt(Server.ser_port_hash.get(s).split("3")[0]));
 						DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 						outToServer.writeBytes("SEND_TEMP_VALUE:"+temp +":"+value+ "\n");
 						outToServer.flush();

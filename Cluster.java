@@ -61,7 +61,7 @@ public class Cluster {
 		}
 		for(int i = 0; i < totalServers; i++)
 		{
-			server_port_dns = server_port_dns + i + "=" + serverPortList.get(i) + "-"+serverDNSList[i] + ",";
+			server_port_dns = server_port_dns + i + "=" + serverPortList.get(i) + "#"+serverDNSList[i] + ",";
 		}
 		server_port_dns = server_port_dns.substring(0, server_port_dns.length() - 1);
 		System.out.println(server_port_dns+"Server port dns...");
