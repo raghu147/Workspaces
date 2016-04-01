@@ -1,4 +1,9 @@
 Manifest-Version: 1.0
 Created-By: Bundle
-Class-Path: ./custom_lib.jar
-Main-Class: 
+Class-Path: opencsv-3.7.jar
+Main-Class: Test
+
+
+#javac -cp "*"  *.java
+#jar cfm job.jar MANIFEST.MF *.jar *.class
+#java -jar job.jar Test
