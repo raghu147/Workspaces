@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
@@ -24,33 +25,48 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 
 public class Cluster {
-	private static String bucketName = "cs6240sp16";
 	static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
 	static List<String> sampleKeys = new ArrayList<String>();
 	static BufferedReader reader = null;
+	static BufferedReader dnsreader = null;
 	static Set<Double> sampleTempList = new HashSet<Double>();
 	public static void main(String arg[]) throws UnknownHostException, IOException{
 
 		String range="";
-		String server_port="";
+		String server_port_dns="";
+		String dns_file_path = "publicDNS.txt";
 
 
-		// 4 0 11000 12000 13000 14000 
+		// 4 0 cs6240sp16 11000 12000 13000 14000 
 		int totalServers = Integer.parseInt(arg[0]);
 		int serverNumber = Integer.parseInt(arg[1]);
+		String bucketName = arg[2];
 
 		List<Integer> serverPortList = new ArrayList<Integer>();
+		String[] serverDNSList = null;
 
-		for(int i = 2; i <  arg.length;i++){
+		try(BufferedReader br = new BufferedReader(new FileReader(dns_file_path))){
+			String line;
+		    while ((line = br.readLine()) != null) {
+		       serverDNSList = line.split(" ");
+		    }
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		
+		for(int i = 3; i <  arg.length;i++){
 			serverPortList.add(Integer.parseInt(arg[i]));
 		}
 		for(int i = 0; i < totalServers; i++)
 		{
-			server_port = server_port + i + "-" + serverPortList.get(i) + ",";
+			server_port_dns = server_port_dns + i + "=" + serverPortList.get(i) + "-"+serverDNSList[i] + ",";
 		}
-		server_port = server_port.substring(0, server_port.length() - 1);
+		server_port_dns = server_port_dns.substring(0, server_port_dns.length() - 1);
+		System.out.println(server_port_dns+"Server port dns...");
 
-		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber,totalServers));	
+		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber,totalServers, bucketName));	
 
 		t1.start();
 
@@ -75,7 +91,7 @@ public class Cluster {
 							if(key.equals("climate/"))
 								continue;
 							if(key.equals("climate/200001hourly.txt.gz")
-									|| key.equals("climate/200102hourly.txt.gz")
+									/*|| key.equals("climate/200102hourly.txt.gz")
 									|| key.equals("climate/200203hourly.txt.gz")
 									|| key.equals("climate/200304hourly.txt.gz")
 									|| key.equals("climate/200405hourly.txt.gz")
@@ -85,7 +101,7 @@ public class Cluster {
 									|| key.equals("climate/199609hourly.txt.gz")
 									|| key.equals("climate/199710hourly.txt.gz")
 									|| key.equals("climate/199811hourly.txt.gz")
-									|| key.equals("climate/200012hourly.txt.gz") ){
+									|| key.equals("climate/200012hourly.txt.gz")*/ ){
 								sampleKeys.add(key);
 							} 
 
@@ -176,14 +192,12 @@ public class Cluster {
 				range=range.substring(0,range.length()-1);
 
 			
-				for(int port : serverPortList)
-					dispatchSendMessage(port, "SERVER_PORT_LIST:"+server_port);
-				for(int port : serverPortList)
-				{
-					dispatchSendMessage(port, "RANGE:"+range);
-				}
 				for(int i = 0;i  <  serverPortList.size(); i++)
-					dispatchSendMessage(serverPortList.get(i),"FIN_SENDING_DATA:");
+					dispatchSendMessage(serverPortList.get(i), serverDNSList[i], "SERVER_PORT_DNS_LIST:"+server_port_dns);
+				for(int i = 0;i  <  serverPortList.size(); i++)
+					dispatchSendMessage(serverPortList.get(i), serverDNSList[i], "RANGE:"+range);
+				for(int i = 0;i  <  serverPortList.size(); i++)
+					dispatchSendMessage(serverPortList.get(i), serverDNSList[i],"FIN_SENDING_DATA:");
 				 
 
 			} 
@@ -204,9 +218,9 @@ public class Cluster {
 		}
 	}
 
-	public static void dispatchSendMessage(int port,String message) throws UnknownHostException, IOException{
+	public static void dispatchSendMessage(int port, String dns, String message) throws UnknownHostException, IOException{
 
-		Client obj = new Client(port,message+"\n");
+		Client obj = new Client(port,dns, message+"\n");
 		Thread sendThread = new Thread(obj);
 		sendThread.run();
 		obj.send();
@@ -221,25 +235,23 @@ class Client extends Thread{
 
 	int port;
 	String message;
+	String dns;
 	ArrayList<String> range;
 
-	public Client(int sendToPort, String message) {
+	public Client(int sendToPort, String dns, String message) {
 
 		this.port = sendToPort;
+		this.dns = dns;
 		this.message = message;
 	}
-	public Client(int sendToPort, List<String> range) {
-
-		this.port = sendToPort;
-		this.range = (ArrayList<String>) range;
-	}
-
-
+	
 	public void send()throws UnknownHostException, IOException {
 
-		Socket clientSocket = new Socket("localhost",port);
+		Socket clientSocket = new Socket(dns,port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');
+		outToServer.flush();
+		outToServer.close();
 		clientSocket.close(); 
 
 	}
