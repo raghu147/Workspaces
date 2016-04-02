@@ -3,6 +3,7 @@ import java.io.DataOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -32,51 +33,57 @@ public class Cluster {
 	static Set<Double> sampleTempList = new HashSet<Double>();
 	public static void main(String arg[]) throws UnknownHostException, IOException{
 
+		// Reading all arguments
 		String range="";
 		String server_port_dns="";
 		String dns_file_path = "publicDNS.txt";
 
-
-		// 4 0 cs6240sp16 11000 12000 13000 14000 
+		// 4 0 cs6240sp16 s3output 7777(monitor port) 11000 12000 13000 14000 
 		int totalServers = Integer.parseInt(arg[0]);
 		int serverNumber = Integer.parseInt(arg[1]);
 		String bucketName = arg[2];
+		String outputBucketName = arg[3];
+		int monitorPort = Integer.parseInt(arg[4]);
 
 		List<Integer> serverPortList = new ArrayList<Integer>();
 		String[] serverDNSList = null;
 
+		// Read the DNS file, and store it in a string(contains dns of all machines)
 		try(BufferedReader br = new BufferedReader(new FileReader(dns_file_path))){
 			String line;
-		    while ((line = br.readLine()) != null) {
-		       serverDNSList = line.split(" ");
-		    }
+			while ((line = br.readLine()) != null) {
+				serverDNSList = line.split(" ");
+			}
 		}
 		catch(Exception e)
 		{
 			e.printStackTrace();
 		}
-		
-		for(int i = 3; i <  arg.length;i++){
+
+		// Copy all the ports into an ArrayList
+		for(int i = 5; i <  arg.length;i++){
 			serverPortList.add(Integer.parseInt(arg[i]));
 		}
+		// Copy a combination of server number, server port and server dns into a string
+		// 0=localhost#8890,1=localhost#8891
 		for(int i = 0; i < totalServers; i++)
 		{
 			server_port_dns = server_port_dns + i + "=" + serverPortList.get(i) + "#"+serverDNSList[i] + ",";
 		}
 		server_port_dns = server_port_dns.substring(0, server_port_dns.length() - 1);
-		System.out.println(server_port_dns+"Server port dns...");
 
-		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber,totalServers, bucketName));	
+		// Start Server thread
+		Thread t1 = new Thread(new Server(serverPortList.get(serverNumber),serverNumber,totalServers, bucketName, outputBucketName, monitorPort));	
 
 		t1.start();
 
 		/* Pass Ranges */
 		try{
-
+			// If server is master, sort the temperatures read from bucket to calculate ranges
 			if(serverNumber == 0){
 				/* Determine Ranges */
 				try {
-					
+
 					/* Get Keys */
 					ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
 							.withBucketName(bucketName)
@@ -115,13 +122,13 @@ public class Cluster {
 
 						S3Object s3object = s3Client.getObject(new GetObjectRequest(
 								bucketName, sampleKeys.get(i)));
-						
+
 						// Get a range of bytes from an object.
 
 						GetObjectRequest rangeObjectRequest = new GetObjectRequest(
 								bucketName, sampleKeys.get(i));
 						rangeObjectRequest.setRange(0, 10);
-						
+
 						GZIPInputStream gzin = new GZIPInputStream(s3object.getObjectContent());
 						InputStreamReader decoder = new InputStreamReader(gzin);
 						reader = new BufferedReader(decoder);
@@ -130,11 +137,11 @@ public class Cluster {
 						while((line = reader.readLine()) != null) {
 
 							if(!line.startsWith("Wban Number")){
-								
+
 								String splits[]=line.split(",");
 								if(splits.length>=8){
 									String dryBulbTemp=splits[8];
-									
+
 									if(!dryBulbTemp.isEmpty()&& isDouble(dryBulbTemp)){
 										Double temperature = Double.parseDouble(dryBulbTemp);
 										sampleTempList.add(temperature);
@@ -175,7 +182,7 @@ public class Cluster {
 				int startIndex=0;
 				int endIndex=0;
 
-
+				// Calculate ranges
 				for(int i=0;i<totalServers;i++){
 					if(i==0){
 						startIndex= factor*i;
@@ -191,23 +198,68 @@ public class Cluster {
 				}
 				range=range.substring(0,range.length()-1);
 
-			
+				// Broadcast the values Server_Port_DNS, Range
 				for(int i = 0;i  <  serverPortList.size(); i++)
 					dispatchSendMessage(serverPortList.get(i), serverDNSList[i], "SERVER_PORT_DNS_LIST:"+server_port_dns);
 				for(int i = 0;i  <  serverPortList.size(); i++)
 					dispatchSendMessage(serverPortList.get(i), serverDNSList[i], "RANGE:"+range);
 				for(int i = 0;i  <  serverPortList.size(); i++)
 					dispatchSendMessage(serverPortList.get(i), serverDNSList[i],"FIN_SENDING_DATA:");
-				 
 
-			} 
-		}catch(Exception e){
+				ServerSocket serverSock = null;
+				Socket s = null;
 
+				// Check the status of all the machines and kills them, once all the machines finish reading
+				try {
+					int count = 0;
+					List<Integer> servers_ended = new ArrayList<Integer>();
+					serverSock = new ServerSocket(7777);
+
+					while(true)
+					{
+						for(int i = 0;i  <  serverPortList.size(); i++)
+						{
+							if(!servers_ended.contains(i))
+							dispatchSendMessage(serverPortList.get(i), serverDNSList[i],"GET_STATUS:");
+						}
+						s = serverSock.accept();
+						BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
+						String line = inFromClient.readLine();
+
+						if(line.startsWith("SENDING_STATUS"))
+						{
+							// Receives the status
+							//System.out.println("Count value, server, stop  ...." + count +"," + Integer.parseInt(line.split(":")[2])+"," + Integer.parseInt(line.split(":")[1]));
+							if((!servers_ended.contains(Integer.parseInt(line.split(":")[2]))) && (Integer.parseInt(line.split(":")[1]) == 1))
+							{
+								count += Integer.parseInt(line.split(":")[1]);
+								//System.out.println("Count value incremented...." + count);
+								servers_ended.add(Integer.parseInt(line.split(":")[2]));
+							}
+						}
+						if(count == totalServers)
+						{
+							// Kill machines
+							for(int i = 0;i  <  serverPortList.size(); i++)
+								dispatchSendMessage(serverPortList.get(i), serverDNSList[i],"KILL_YOURSELF:");
+							break;
+						}
+						Thread.sleep(11000);
+					}
+					s.close();
+				}
+				catch(Exception e){
+					e.printStackTrace();
+				}
+
+			}
+		}catch(Exception e)
+		{
+			e.printStackTrace();
 		}
-
-
 	}
 
+	// Check if value is double
 	private static boolean isDouble(String dryBulbTemp) {
 		// TODO Auto-generated method stub
 		try {
@@ -218,6 +270,7 @@ public class Cluster {
 		}
 	}
 
+	// Dispatching messages to respective hostname and port
 	public static void dispatchSendMessage(int port, String dns, String message) throws UnknownHostException, IOException{
 
 		Client obj = new Client(port,dns, message+"\n");
@@ -228,8 +281,6 @@ public class Cluster {
 
 
 }
-
-
 
 class Client extends Thread{
 
@@ -244,9 +295,8 @@ class Client extends Thread{
 		this.dns = dns;
 		this.message = message;
 	}
-	
-	public void send()throws UnknownHostException, IOException {
 
+	public void send()throws UnknownHostException, IOException {
 		Socket clientSocket = new Socket(dns,port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');

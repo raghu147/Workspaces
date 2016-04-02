@@ -37,12 +37,14 @@ public class Server extends Thread{
 	int serverNumber;
 	int totalServers;
 	String bucketName;
+	String outputBucketName; 
+	int monitorPort;
 	static int server_stop = 0;
 	static String rangeForCurrentServer;
-	static HashMap<Double, String> tempListMap;
-	static HashMap<Double, String> tempListFromOtherServerMap;
-	static HashMap<Double, String> finalTempListMap;
-	static HashMap<Double, String> topTempListMap;
+	static HashMap<String, Double> tempListMap;
+	static HashMap<String, Double> tempListFromOtherServerMap;
+	static HashMap<String, Double> finalTempListMap;
+	static HashMap<String, Double> topTempListMap;
 	static Collection<String> topTenTempList;
 	static HashMap<Integer, String> rangeMap = new HashMap<Integer, String>();
 	static HashMap<Integer, String> ser_port_hash = new HashMap<Integer, String>();
@@ -50,15 +52,17 @@ public class Server extends Thread{
 	static String allRanges[];
 	PrintWriter writer = null;
 
-	public Server(int p, int serverNumber, int totalServers, String bucketName){
+	public Server(int p, int serverNumber, int totalServers, String bucketName,String outputBucketName, int monitorPort){
 		this.port = p;
 		this.serverNumber = serverNumber;
 		this.totalServers = totalServers;
 		this.bucketName = bucketName;
-		tempListMap = new HashMap<Double, String>();
-		tempListFromOtherServerMap = new HashMap<Double, String>();
-		finalTempListMap = new HashMap<Double, String>();
-		topTempListMap = new HashMap<Double, String>();
+		this.outputBucketName = outputBucketName;
+		this.monitorPort = monitorPort;
+		tempListMap = new HashMap<String, Double>();
+		tempListFromOtherServerMap = new HashMap<String, Double>();
+		finalTempListMap = new HashMap<String, Double>();
+		topTempListMap = new HashMap<String, Double>();
 		topTenTempList = new ArrayList<String>();
 	}
 
@@ -72,7 +76,6 @@ public class Server extends Thread{
 		} catch (Exception e1) {
 			e1.printStackTrace();
 		}
-		//BufferedReader reader = null;
 
 		try {
 			serverSock = new ServerSocket(port);
@@ -80,7 +83,6 @@ public class Server extends Thread{
 
 			while(true)
 			{
-				//System.out.println("inside infinite while loop");
 				s = serverSock.accept();
 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
 				String line = inFromClient.readLine();
@@ -92,9 +94,7 @@ public class Server extends Thread{
 					for(String sp : server_port_list)
 					{
 						String port_dns = sp.split("=")[1];
-						System.out.println(port_dns+" Port and dns...");
 						int server_num = Integer.parseInt(sp.split("=")[0]);
-						System.out.println(server_num + " server number....");
 						ser_port_hash.put(server_num, port_dns);
 					}	
 				}
@@ -115,20 +115,35 @@ public class Server extends Thread{
 				// Listening to other servers for temperature values
 				if(line.startsWith("SEND_TEMP_VALUE"))
 				{
-					System.out.println("Received " +line);
-					tempListFromOtherServerMap.put(Double.parseDouble(line.split(":")[1]), line.split(":")[2]);
+					tempListFromOtherServerMap.put(line.split(":")[2], Double.parseDouble(line.split(":")[1]));
 				}
 				// Listening to the finished sending message
 				if(line.startsWith("FIN_SENDING_DATA")){
 					Thread readThread = new Thread(new ReadServer(port,serverNumber, totalServers, bucketName));
 					readThread.start();
 				}
-				if(server_stop == 1)
+				// Listening to Get Status message sent by master thread
+				if(line.startsWith("GET_STATUS"))
+				{
+					Thread.sleep(10 * serverNumber);
+					Socket clientSocket = new Socket(ser_port_hash.get(0).split("#")[1], monitorPort);
+					DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+					outToServer.writeBytes("SENDING_STATUS:"+ server_stop + ":" + serverNumber +"\n");
+					outToServer.flush();
+					outToServer.close();
+					clientSocket.close();
+				}
+				// Break the loop
+				if(line.startsWith("KILL_YOURSELF"))
 					break;
 			}
 
 			// Print top ten temperature values into a file
-			topTenTempList = topTempListMap.values();
+			Server.finalTempListMap.putAll(Server.tempListMap);
+			Server.finalTempListMap.putAll(Server.tempListFromOtherServerMap);
+			Server.topTempListMap = (HashMap<String, Double>) MapUtil.sortByValue(Server.finalTempListMap);
+
+			topTenTempList = topTempListMap.keySet();
 			Iterator<String> i = topTenTempList.iterator();
 			int c = 0;
 			while(i.hasNext() && c<10)
@@ -137,8 +152,9 @@ public class Server extends Thread{
 				c++;
 			}
 			writer.close();
+			s.close();
 
-		} catch (IOException e) {
+		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
 		}
 
@@ -160,7 +176,6 @@ class ReadServer extends Thread{
 	static int startFileIndex;
 	static int endFileIndex;
 	static int factor;
-	static int count = 1;
 	static int readComplete = 0;
 	static List<String> bucketKeys = new ArrayList<String>();
 
@@ -214,7 +229,6 @@ class ReadServer extends Thread{
 						s3object.getObjectMetadata().getContentType());
 
 				// Get a range of bytes from an object.
-
 				GetObjectRequest rangeObjectRequest = new GetObjectRequest(
 						bucketName, bucketKeys.get(i));
 				rangeObjectRequest.setRange(0, 10);
@@ -230,8 +244,7 @@ class ReadServer extends Thread{
 				double start = Double.parseDouble(Server.rangeForCurrentServer.split("=")[0]);
 				double end =  Double.parseDouble(Server.rangeForCurrentServer.split("=")[1]);
 
-				while((readline = reader.readLine()) != null && count <= 2000) {
-					count ++;
+				while((readline = reader.readLine()) != null) {
 					if(!readline.startsWith("Wban Number")){
 
 						String splits[]=readline.split(",");
@@ -246,7 +259,7 @@ class ReadServer extends Thread{
 								String value = wban + "," +date +","+ time +","+ temperature;
 								// If its within its range
 								if(temperature >= start && temperature <= end)
-									Server.tempListMap.put(temperature, value);
+									Server.tempListMap.put(value, temperature);
 								// If it belongs to some other server
 								else
 									sendToOtherServer(temperature, value);
@@ -278,13 +291,11 @@ class ReadServer extends Thread{
 			e.printStackTrace();
 		}
 
-		Server.finalTempListMap.putAll(Server.tempListMap);
-		Server.finalTempListMap.putAll(Server.tempListFromOtherServerMap);
-		Server.topTempListMap = (HashMap<Double, String>) MapUtil.sortByValue(Server.finalTempListMap);
-		System.out.println("Server:"+serverNumber + " Sorted data");
+		System.out.println("Read is done.......");
 		Server.server_stop = 1;
 	}
 
+	// To check if value is double
 	public boolean isDouble(String dryBulbTemp) {
 		// TODO Auto-generated method stub
 		try {
@@ -294,7 +305,7 @@ class ReadServer extends Thread{
 			return false;
 		}
 	}
-
+	// Sending the value to other servers
 	public void sendToOtherServer(double temp, String value) throws UnknownHostException, IOException
 	{
 		for(int s : Server.rangeMap.keySet())
@@ -306,7 +317,7 @@ class ReadServer extends Thread{
 			{
 				if(Server.ser_port_hash.containsKey(s)){
 					try{
-						Socket clientSocket = new Socket(Server.ser_port_hash.get(s).split("#")[1], Integer.parseInt(Server.ser_port_hash.get(s).split("3")[0]));
+						Socket clientSocket = new Socket(Server.ser_port_hash.get(s).split("#")[1], Integer.parseInt(Server.ser_port_hash.get(s).split("#")[0]));
 						DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 						outToServer.writeBytes("SEND_TEMP_VALUE:"+temp +":"+value+ "\n");
 						outToServer.flush();
@@ -335,7 +346,7 @@ class MapUtil
 		{
 			public int compare( Map.Entry<K, V> o1, Map.Entry<K, V> o2 )
 			{
-				return (o1.getValue()).compareTo( o2.getValue() );
+				return (o2.getValue()).compareTo( o1.getValue() );
 			}
 		} );
 
