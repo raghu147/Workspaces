@@ -97,7 +97,18 @@ public class Cluster {
 							String key=objectSummary.getKey();
 							if(key.equals("climate/"))
 								continue;
-							if(key.equals("climate/200001hourly.txt.gz")){
+							if(key.equals("climate/200001hourly.txt.gz")
+									|| key.equals("climate/200102hourly.txt.gz")
+									|| key.equals("climate/200203hourly.txt.gz")
+									|| key.equals("climate/200304hourly.txt.gz")
+									|| key.equals("climate/200405hourly.txt.gz")
+									|| key.equals("climate/200506hourly.txt.gz")
+									|| key.equals("climate/200607hourly.txt.gz")
+									|| key.equals("climate/199608hourly.txt.gz")
+									|| key.equals("climate/199609hourly.txt.gz")
+									|| key.equals("climate/199710hourly.txt.gz")
+									|| key.equals("climate/199811hourly.txt.gz")
+									|| key.equals("climate/200012hourly.txt.gz") ){
 								sampleKeys.add(key);
 							} 
 
