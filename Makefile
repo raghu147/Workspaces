@@ -24,6 +24,9 @@ compile:
 
 clean:
 	rm *.class
+	aws ec2 delete-security-group --group-name sg-a8
+	rm key.pem
+	
 
 all:
 	javac -cp \* *.java
