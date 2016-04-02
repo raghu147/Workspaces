@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -28,6 +29,8 @@ import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.Upload;
 
 
 
@@ -153,6 +156,13 @@ public class Server extends Thread{
 			}
 			writer.close();
 			s.close();
+			
+			// Upload output files to given bucket
+			TransferManager tx = new TransferManager(
+					new ProfileCredentialsProvider());
+			
+			File f = new File(serverNumber+"topten.txt");		
+			tx.upload(outputBucketName, f.getName(), f);
 
 		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
@@ -221,7 +231,7 @@ class ReadServer extends Thread{
 
 
 			/* Read from each key(file) that this server is supposed to read */
-			for(int i=startFileIndex;i<=startFileIndex;i++){
+			for(int i=startFileIndex;i<=endFileIndex;i++){
 				System.out.println(bucketKeys.get(i)+"FILENAME");
 				S3Object s3object = s3Client.getObject(new GetObjectRequest(
 						bucketName, bucketKeys.get(i)));
