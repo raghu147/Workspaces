@@ -2,6 +2,8 @@
 
 #aws ec2 authorize-security-group-ingress --group-name my-sg2 --protocol tcp --port 22 --cidr 0.0.0.0/0
 
+#aws ec2 authorize-security-group-ingress --group-name my-sg1 --protocol tcp --port 0-65535 --cidr 0.0.0.0/0
+
 #aws ec2 create-key-pair --key-name key --query 'KeyMaterial' --output text > key.pem
 
 #chmod 400 key.pem
