@@ -27,7 +27,7 @@ sleep 120
 
 for i in $(echo $listOfDNS | tr " " "\n")
 do
-  scp -i "key.pem" SampleFile.txt ec2-user@$i:~
+  scp -oStrictHostKeyChecking=no -i "key.pem" SampleFile.txt ec2-user@$i:~
   sleep 120
 done
 
