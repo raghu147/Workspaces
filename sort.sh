@@ -41,3 +41,5 @@ then
 fi
 serverNumber=$(($serverNumber+1))
 done
+
+#sh -c 'nohup ./dostuff > dev/null 2>&1 &'
