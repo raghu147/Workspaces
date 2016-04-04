@@ -1,11 +1,7 @@
-servers=2
-num1=0
-num2=1
-ports=18003 18004
-
 
 compile:
-
+	
+	mkdir lib
 	wget https://www.dropbox.com/s/j92w2h2wkrhtqpl/aws-java-sdk-1.10.65.jar
 	wget https://www.dropbox.com/s/y8uwfsu4n5m3d7x/commons-logging-1.1.3.jar
 	wget https://www.dropbox.com/s/ownwatesagg4ama/commons-codec-1.6.jar
@@ -16,23 +12,17 @@ compile:
 	wget https://www.dropbox.com/s/hqak1jygo1tq22r/jackson-databind-2.5.3.jar
 	wget https://www.dropbox.com/s/x3u9mlkjhgvgf46/javax.mail-api-1.4.6.jar
 	wget https://www.dropbox.com/s/gtd9blwwz0p5abr/joda-time-2.8.1.jar
-
-
+	
 	javac -cp "*" Cluster.java Server.java
+	mv *.jar lib
+	jar cfm Climate.jar MANIFEST.MF *.class
+	#java -cp  Climate.jar:lib/* Cluster 1 0 cs6240sp16 s3output 7777 11000
 
-	jar cfm Climate.jar MANIFEST.MF *.jar *.class
 
 clean:
-	rm *.class
-	aws ec2 delete-security-group --group-name sg-a8
-	rm key.pem
-	
-
-all:
-	javac -cp \* *.java
-	
-master:
-	java -cp .:\* Cluster  $(servers) $(num1) $(ports)
-slave:
-	java -cp .:\* Cluster  $(servers) $(num2) $(ports)
-
+	rm -f *.class
+	rm -f *.jar
+	rm -f publicDNS.txt
+	rm -f instance.txt
+	rm -f key.pem
+	rm -rf lib
