@@ -5,12 +5,13 @@ port2=17322
 output=cs6240sp16
 input=cs6240sp16
 clean:
-	rm -f *.class
+	rm -rf out *.class
+	mkdir out
 all:
-	javac -cp \* *.java
+	javac -cp ".:lib/*" *.java
 master:
-	java -cp .:\* Master $(machines) $(input) $(output) $(master_port) $(port1) $(port2)
+	java -cp ".:lib/*" Master $(machines) $(input) $(output) $(master_port) $(port1) $(port2)
 slave1:
-	java -cp .:\* Slave $(port1)
+	java -cp ".:lib/*" Slave $(port1)
 slave2:
-	java -cp .:\* Slave $(port2)
+	java -cp ".:lib/*" Slave $(port2)
