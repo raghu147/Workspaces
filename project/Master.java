@@ -77,7 +77,12 @@ public class Master {
 		server_port_dns = server_port_dns.substring(0, server_port_dns.length() - 1);
 
 		// Read S3 bucket to calculate size and number of files
-		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+		
+		
+		//----------------------------------------------------------------------------------------
+		
+		
+		/*ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
 				.withBucketName(inputBucketName)
 				.withPrefix("climate");
 		ObjectListing objectListing;
@@ -149,6 +154,8 @@ public class Master {
 		// Kill the slaves mapper phase
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
+			
+			
 
 		ServerSocket serverSock = null;
 		Socket s = null;
@@ -171,6 +178,22 @@ public class Master {
 		{
 			e.printStackTrace();
 		}
+		
+		*/
+		
+	//----------------------------------------------------------------------------------------
+		
+		
+		
+		//---------------------------------------REDUCER SECTION ----------------------------------------------------
+		String message[] = {"","hi","hello"};
+		for(int i = 1;i  <  serverPortList.size(); i++)
+			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+message[i]);
+		
+		for(int i = 1;i  <  serverPortList.size(); i++)
+			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
+		
+		//-----------------------------------------------------------------------------------------------
 	}
 
 	public static void dispatchSendMessage(String dns, int port, String message) throws UnknownHostException, IOException{
@@ -183,3 +206,4 @@ public class Master {
 	}
 
 }
+
