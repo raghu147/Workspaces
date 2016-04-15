@@ -77,21 +77,18 @@ public class Master {
 		server_port_dns = server_port_dns.substring(0, server_port_dns.length() - 1);
 
 		// Read S3 bucket to calculate size and number of files
-		
-		
-		//----------------------------------------------------------------------------------------
-		
-		
-		/*ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(inputBucketName)
-				.withPrefix("climate");
-		ObjectListing objectListing;
 
+
+		//----------------------------------------------------------------------------------------
+
+		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+				.withBucketName(inputBucketName);
+		//.withPrefix("climate");
+		ObjectListing objectListing;
 		do {
 			objectListing = s3Client.listObjects(listObjectsRequest);
 			for (S3ObjectSummary objectSummary : 
 				objectListing.getObjectSummaries()) {
-
 				String key=objectSummary.getKey();
 				if(key.equals("climate/"))
 					continue;
@@ -99,16 +96,19 @@ public class Master {
 				file_count++;
 			}
 			totalSize /= 1024*1024;
-			System.out.println(totalSize);
+			System.out.println(totalSize + "," + file_count);
 			listObjectsRequest.setMarker(objectListing.getNextMarker());
 		} while (objectListing.isTruncated());
 
 		// Calculate number of mappers per machine
-		totalNumOfMappers = (int)totalSize / blockSize;
+		if(totalSize < blockSize)
+			totalNumOfMappers = 1;
+		else
+			totalNumOfMappers = (int)totalSize / blockSize;
+
 		file_factor = file_count / totalNumOfMappers;
 		factor = totalNumOfMappers / numOfMachines;
 		diff = totalNumOfMappers - (factor * numOfMachines);
-
 		// Store mapper per machine info in a hashmap
 		startFileIndex = 0;
 		endFileIndex = file_factor - 1;
@@ -138,61 +138,80 @@ public class Master {
 					startFileIndex = endFileIndex + 1;
 					endFileIndex += file_factor;
 				}
-				slaveInfo.put(i, map_info.substring(0,map_info.length()-1));
+				if(!map_info.isEmpty())
+					slaveInfo.put(i, map_info.substring(0,map_info.length()-1));
 			}
 		}
+
 
 		// Broadcast input, output bucket info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "BUCKET_INFO:"+inputBucketName+","+outputBucketName);
+
 		// Broadcast server_port_dns info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "SERVER_PORT_DNS_LIST:"+server_port_dns);
+
 		// Broadcast slave info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i));
-		// Kill the slaves mapper phase
-		for(int i = 1;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
-			
-			
+		{
+			if(slaveInfo.get(i) != null)
+				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i));
+		}
+
 
 		ServerSocket serverSock = null;
 		Socket s = null;
-
 		// Keep Listening to all the slaves to check if mappers finished their jobs
 		try
 		{
+			int stop_count = 0;
 			serverSock = new ServerSocket(masterPort);
 			System.out.println("Server listening at port: "+masterPort);
 			while(true)
 			{
+				for(int i = 1;i  <  serverPortList.size(); i++)
+					dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "GET_STATUS:");
 				s = serverSock.accept();
-				break;
+				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
+				String line = inFromClient.readLine();
+
+				if(line.startsWith("SENDING_STATUS"))
+				{
+					stop_count += Integer.parseInt(line.split(":")[1]);
+				}
+				System.out.println(stop_count + "========= Stop Count");
+				if(stop_count == numOfMachines)
+				{
+					// Kill machines
+					for(int i = 1;i  <  serverPortList.size(); i++)
+						dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
+					break;
+				}
+				Thread.sleep(11000);
 			}
 			s.close();
 			serverSock.close();
-
 		}
 		catch(Exception e)
 		{
 			e.printStackTrace();
 		}
-		
-		*/
-		
-	//----------------------------------------------------------------------------------------
-		
-		
-		
+
+
+
+		//----------------------------------------------------------------------------------------
+
+
+
 		//---------------------------------------REDUCER SECTION ----------------------------------------------------
-		String message[] = {"","hi","hello"};
+		/*String message[] = {"","hi","hello"};
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+message[i]);
-		
+
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
-		
+		 */
 		//-----------------------------------------------------------------------------------------------
 	}
 
@@ -206,4 +225,3 @@ public class Master {
 	}
 
 }
-

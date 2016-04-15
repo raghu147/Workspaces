@@ -2,11 +2,11 @@ machines=2
 master_port=16000
 port1=17321
 port2=17322
-output=cs6240sp16
-input=cs6240sp16
+output=project-bucket-cs6240-out
+#input=project-bucket-cs6240
+input=climate6240
 clean:
-	rm -rf out *.class
-	mkdir out
+	rm -f *.class
 all:
 	javac -cp ".:lib/*" *.java
 master:

@@ -29,6 +29,16 @@ class Text {
 }
 
 class LongWritable {
+	String val;
+	public LongWritable(String lowerCase) {
+		
+		this.val = lowerCase.toLowerCase();
+	}
+	
+	@Override
+	public String toString() {
+		return val;
+	}
 
 }
 
@@ -76,20 +86,21 @@ class Job {
 
 public class Alice {
 
-	public static class M extends Mapper<LongWritable, Text, Text, Text> {
+	public static class M {
 
-		public void map(LongWritable key, Text value, Context context)
-
+		//public void map(LongWritable key, Text value, Context context)
+		public void map(Text value)
 				throws IOException, InterruptedException {
 
 			String line = value.toString();
 
-			String[] words = line.split(" ");
+			System.out.println(line + "Line in Alice......");
+			/*String[] words = line.split(" ");
 			for (String word : words) {
 
-				// System.out.println("Word="+word);
-				context.write(new Text(word.toLowerCase()), new Text(word.toLowerCase()));
-			}
+				 System.out.println("Word="+word);
+				//context.write(new Text(word.toLowerCase()), new Text(word.toLowerCase()));
+			}*/
 		}
 	}
 
