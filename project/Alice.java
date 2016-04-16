@@ -12,95 +12,20 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
  */
 
-class Text {
-
-	String val;
-	public Text(String lowerCase) {
-		
-		this.val = lowerCase.toLowerCase();
-	}
-	
-	@Override
-	public String toString() {
-		return val;
-	}
-	
-
-}
-
-class LongWritable {
-	String val;
-	public LongWritable(String lowerCase) {
-		
-		this.val = lowerCase.toLowerCase();
-	}
-	
-	@Override
-	public String toString() {
-		return val;
-	}
-
-}
-
-class Configuration {
-
-}
-
-class Reducer<T1, T2, T3, T4> {
-
-}
-
-class Mapper<T1, T2, T3, T4> {
-
-}
-
-class Job {
-
-	public static Job getInstance(Configuration conf, String string) {
-		return null;
-	}
-
-	public void setJarByClass(Class<Alice> class1) {
-
-	}
-
-	public <M> void setMapperClass(Class<M> class1) {
-
-	}
-
-	public <R> void setReducerClass(Class<R> class1) {
-
-	}
-
-	public void setOutputKeyClass(Class<Text> class1) {
-
-	}
-
-	public void setOutputValueClass(Class<Text> class1) {
-
-	}
-
-}
-
-
 
 public class Alice {
 
 	public static class M {
 
-		//public void map(LongWritable key, Text value, Context context)
-		public void map(Text value)
+		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
 
 			String line = value.toString();
-
-			System.out.println(line + "Line in Alice......");
-			/*String[] words = line.split(" ");
+			String[] words = line.split(" ");
 			for (String word : words) {
-
-				 System.out.println("Word="+word);
-				//context.write(new Text(word.toLowerCase()), new Text(word.toLowerCase()));
-			}*/
+				word = word.replaceAll("[^a-zA-Z^0-9]", "");
+				context.write(new Text(word.toLowerCase()), new Text("1"));
+			}
 		}
 	}
 

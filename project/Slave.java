@@ -29,8 +29,8 @@ public class Slave {
 		int port = Integer.parseInt(args[0]);
 		String inputBucket ="";
 		int already_sent = 0;
-		String outputBucket = "project-bucket-cs6240-out";
-		String intermediateBucket = "project-bucket-cs6240-int";
+		String outputBucket = "";
+		String intermediateBucket = "";
 		ServerSocket serverSock = null;
 		Socket s = null;	
 		try
@@ -46,7 +46,8 @@ public class Slave {
 				if(line.startsWith("BUCKET_INFO")){
 					String buckets = line.split(":")[1];
 					inputBucket = buckets.split(",")[0];
-					outputBucket = buckets.split(",")[1];
+					intermediateBucket = buckets.split(",")[1];
+					outputBucket = buckets.split(",")[2];
 					System.out.println("Bucket info is ........" + line);
 				}
 
@@ -149,7 +150,7 @@ class MapperThread extends Thread{
 		for(String mapIndex : listMapIndex)
 		{
 			Context ctx = new Context(0, Context.MAPPER_TYPE, new Text(""),interMapperPath);
-			MapperTask mtask = new MapperTask(mapIndex.split(",")[0], mapIndex.split(",")[1], inputMapperPath, interMapperPath, ctx);
+			MapperTask mtask = new MapperTask(mapIndex.split(",")[0], mapIndex.split(",")[1], mapIndex.split(",")[2], inputMapperPath, interMapperPath, ctx);
 			Thread mtT = new Thread(mtask);
 			mtT.start();
 		}
@@ -165,13 +166,15 @@ class MapperTask extends Thread{
 	BufferedReader reader = null;
 	int startIndex;
 	int endIndex;
+	int mapperNumber;
 	String inputMapPath;
 	String interMapPath;
 
-	public MapperTask(String startIndex, String endIndex, String inputMapPath, String interMapPath, Context ctx)
+	public MapperTask(String startIndex, String endIndex, String mapperNumber, String inputMapPath, String interMapPath, Context ctx)
 	{
 		this.startIndex = Integer.parseInt(startIndex);
 		this.endIndex = Integer.parseInt(endIndex);
+		this.mapperNumber = Integer.parseInt(mapperNumber);
 		this.inputMapPath = inputMapPath;
 		this.interMapPath = interMapPath;
 		this.ctx = ctx;
@@ -185,8 +188,7 @@ class MapperTask extends Thread{
 		try 
 		{
 			c = Class.forName("Alice$M");
-			//method = c.getMethod("map",new Class[] { LongWritable.class, Text.class, Context.class});
-			method = c.getMethod("map",new Class[] { Text.class});
+			method = c.getMethod("map",new Class[] { LongWritable.class, Text.class, Context.class});
 
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
@@ -228,23 +230,29 @@ class MapperTask extends Thread{
 				while((readline = reader.readLine()) != null)
 				{
 					try {
-						//method.invoke(c, new LongWritable(""), new Text(readline), ctx);
-						method.invoke(c, new Text(readline));
+						method.invoke(c.newInstance(), new LongWritable(""), new Text(readline), ctx);
 					} catch (IllegalAccessException e) {
 						e.printStackTrace();
 					} catch (IllegalArgumentException e) {
 						e.printStackTrace();
 					} catch (InvocationTargetException e) {
 						e.printStackTrace();
+					} catch (InstantiationException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
 					}
-					break;
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 
-
+		try {
+			ctx.writeToDisk(mapperNumber);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		// Increment mapperFinishedCount variable
 		synchronized (lock) {
 			Slave.mapperFinisedCount++;
@@ -402,7 +410,7 @@ class ReducerTask extends Thread{
 			e.printStackTrace();
 		}
 
-		context.writeToDisk();
+		//context.writeToDisk();
 
 	}
 
