@@ -146,13 +146,15 @@ class MapperThread extends Thread{
 
 		// Start all the mapper threads
 		String[] listMapIndex = mapInfo.split("#");
-
+		int mCount = 0;
 		for(String mapIndex : listMapIndex)
 		{
-			Context ctx = new Context(0, Context.MAPPER_TYPE, new Text(""),interMapperPath);
+			Context ctx = new Context(mCount, Context.MAPPER_TYPE, new Text(""),interMapperPath);
 			MapperTask mtask = new MapperTask(mapIndex.split(",")[0], mapIndex.split(",")[1], mapIndex.split(",")[2], inputMapperPath, interMapperPath, ctx);
 			Thread mtT = new Thread(mtask);
 			mtT.start();
+			
+			mCount++;
 		}
 	}
 }
@@ -187,8 +189,12 @@ class MapperTask extends Thread{
 		Method method = null;
 		try 
 		{
-			c = Class.forName("Alice$M");
+			//c = Class.forName("Alice$M");
+			c = Class.forName("ClusterAnalysis$M");
+			
 			method = c.getMethod("map",new Class[] { LongWritable.class, Text.class, Context.class});
+			
+			
 
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
@@ -214,7 +220,7 @@ class MapperTask extends Thread{
 			rangeObjectRequest.setRange(0, 10);
 
 			System.out.println("Printing bytes retrieved.");
-			System.out.println(s3object.getObjectContent()+"filename");
+			System.out.println(mapperNumber+"::"+s3object.getObjectContent()+"filename");
 
 			GZIPInputStream gzin = null;
 			try {
@@ -225,11 +231,13 @@ class MapperTask extends Thread{
 			}
 			InputStreamReader decoder = new InputStreamReader(gzin);
 			reader = new BufferedReader(decoder);
-			String readline;
+			String readline ="";
+			int lineCount = 0;
 			try {
 				while((readline = reader.readLine()) != null)
 				{
 					try {
+						//System.out.println("Line "+ mapperNumber + " "+ readline);
 						method.invoke(c.newInstance(), new LongWritable(""), new Text(readline), ctx);
 					} catch (IllegalAccessException e) {
 						e.printStackTrace();
@@ -240,19 +248,26 @@ class MapperTask extends Thread{
 					} catch (InstantiationException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
-					}
+					} 
+					/*if(++lineCount==10)
+						break; */
+					
+					
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-		}
 
+		
+		}
+		
 		try {
 			ctx.writeToDisk(mapperNumber);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
 		// Increment mapperFinishedCount variable
 		synchronized (lock) {
 			Slave.mapperFinisedCount++;

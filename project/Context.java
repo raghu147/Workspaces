@@ -18,7 +18,7 @@ class Text {
 	String val;
 	public Text(String lowerCase) {
 
-		this.val = lowerCase.toLowerCase();
+		this.val = lowerCase;
 	}
 
 	@Override
@@ -33,7 +33,7 @@ class LongWritable {
 	String val;
 	public LongWritable(String lowerCase) {
 
-		this.val = lowerCase.toLowerCase();
+		this.val = lowerCase;
 	}
 
 	@Override
@@ -61,9 +61,9 @@ class Job {
 		return null;
 	}
 
-	public void setJarByClass(Class<Alice> class1) {
+	/*public void setJarByClass(Class<Alice> class1) {
 
-	}
+	}*/
 
 	public <M> void setMapperClass(Class<M> class1) {
 
@@ -90,7 +90,7 @@ class Context {
 
 	List<Text> result;
 	//HashMap<Text, ArrayList<Text>> mapperData = new HashMap<Text, ArrayList<Text>>();
-	HashMap<String, ArrayList<String>> mapperData = new HashMap<String, ArrayList<String>>();
+	HashMap<String, ArrayList<String>> mapperData ;
 
 	int mrNumber;
 	int contextType;
@@ -107,11 +107,12 @@ class Context {
 		this.contextType = contextType;
 		this.key = key;
 		this.outputBucketName = outputBucketName;
+		this.mapperData = new HashMap<String, ArrayList<String>>();
 	}
 
 	public void write(Text key, Text val) {
 
-
+		
 		if(contextType == REDUCER_TYPE){
 
 			result.add(val);
@@ -134,6 +135,8 @@ class Context {
 			}
 
 		}
+		
+		
 
 	}
 
@@ -181,20 +184,45 @@ class Context {
 			TransferManager mtx = new TransferManager(
 					new ProfileCredentialsProvider());
 			// Create separate file for each key
-			PrintWriter mapperPartFile = null;
+			//PrintWriter mapperPartFile = null;
+			File mapperPartFile = null;
+			System.out.println("Trying to write for:"+mrNumber);
+			FileWriter fw;
+			BufferedWriter bw = null; 
 			for(String key: mapperData.keySet())
 			{
-				mapperPartFile = new PrintWriter("M"+mrNumber+"_"+key+".txt", "UTF-8");
+				//partFile = new File("out/part-r-"+key);
+				mapperPartFile = new File("temp/M"+mrNumber+"_"+key+"_.txt");
+
+				if (!mapperPartFile.exists()) {
+					mapperPartFile.createNewFile();
+				}
+
+				fw = new FileWriter(mapperPartFile.getAbsoluteFile());
+				bw = new BufferedWriter(fw);
 				ArrayList<String> eachVal = mapperData.get(key);
 				for(String v : eachVal)
 				{
-					mapperPartFile.println(v);
-					mapperPartFile.flush();
+					bw.write(v+"\n");
+					
+					
 				}
-			}
-			mapperPartFile.close();
+				
+
+				bw.close();
+				fw.close();
+				
 			
+			}
+			
+		
+		
+		
 			// Push all the mapper files onto intermediate bucket
+			
+			System.out.println("Finished writing mapper files into local disk");
+			/*
+			 * 
 			
 			File dir = new File(".");
 			File [] files = dir.listFiles(new FilenameFilter() {
@@ -203,15 +231,12 @@ class Context {
 			        return name.endsWith(".txt");
 			    }
 			});
-			
-			System.out.println("Finished writing mapper files into local disk");
-			
 			for (File mapperFile : files) {
 				if(!mapperFile.getName().equals("publicDNS.txt"))
 				{
 					mtx.upload(outputBucketName, mapperFile.getName(), mapperFile);
 				}
-			}
+			} */
 			System.out.println("Finished pushing mapper files into S3 intermediate bucket");
 		}
 

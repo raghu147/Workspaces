@@ -20,7 +20,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class Master {
 	static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
-	public static void main(String arg[]) throws UnknownHostException, IOException
+	public static void main(String arg[]) throws UnknownHostException, IOException, InterruptedException
 	{
 		// Arguments: totalMachines input intermediate output masterport port1 port2 ....
 		int numOfMachines = Integer.parseInt(arg[0]);
@@ -36,7 +36,9 @@ public class Master {
 		String server_port_dns="";
 
 		double totalSize = 0.0;
-		int blockSize = 128;
+		//int blockSize = 128;
+		int blockSize = 10;
+		
 		int totalNumOfMappers = 0;
 		int factor = 0;
 		int diff = 0;
@@ -88,7 +90,7 @@ public class Master {
 			for (S3ObjectSummary objectSummary : 
 				objectListing.getObjectSummaries()) {
 				String key=objectSummary.getKey();
-				if(key.equals("climate/"))
+				if(key.equals("airline/"))
 					continue;
 				totalSize += objectSummary.getSize();
 				file_count++;
@@ -104,10 +106,16 @@ public class Master {
 			totalNumOfMappers = (int)totalSize / blockSize;
 
 		file_factor = file_count / totalNumOfMappers;
+		if(file_factor==0)
+			totalNumOfMappers=file_count;
+		
 		factor = totalNumOfMappers / numOfMachines;
 		diff = totalNumOfMappers - (factor * numOfMachines);
 		// Store mapper per machine info in a hashmap
 		startFileIndex = 0;
+		if(file_factor==0)
+			endFileIndex=0;
+		else
 		endFileIndex = file_factor - 1;
 		int map_count = 1;
 		for(int i = 1; i<= numOfMachines;i++)
@@ -123,6 +131,9 @@ public class Master {
 					map_info += startFileIndex + "," + endFileIndex + "," + map_count + "#";
 					map_count ++;
 					startFileIndex = endFileIndex + 1;
+					if(file_factor==0)
+						endFileIndex+=1;
+					else
 					endFileIndex += file_factor;
 				}
 				slaveInfo.put(i, map_info.substring(0,map_info.length()-1));
@@ -136,6 +147,9 @@ public class Master {
 					map_info += startFileIndex + "," + endFileIndex + "," + map_count + "#";
 					map_count ++;
 					startFileIndex = endFileIndex + 1;
+					if(file_factor==0)
+						endFileIndex+=1;
+					else
 					endFileIndex += file_factor;
 				}
 				if(!map_info.isEmpty())
@@ -148,17 +162,22 @@ public class Master {
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "BUCKET_INFO:"+inputBucketName+","+intermediateBucketName +","+outputBucketName);
 
+		Thread.sleep(1000);
+		
 		// Broadcast server_port_dns info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "SERVER_PORT_DNS_LIST:"+server_port_dns);
 
+		Thread.sleep(1000);
+		
 		// Broadcast slave info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 		{
 			if(slaveInfo.get(i) != null)
+				
 				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i));
 		}
-
+		
 
 		ServerSocket serverSock = null;
 		Socket s = null;
@@ -190,6 +209,7 @@ public class Master {
 				}
 				Thread.sleep(11000);
 			}
+			Thread.sleep(21000);
 			s.close();
 			serverSock.close();
 		}
@@ -204,7 +224,7 @@ public class Master {
 		//----------------------------------------------------------------------------------------
 
 		// Read intermediate S3 bucket to get mapper files and calculate number of keys
-		ListObjectsRequest listObjectsRequestIntermediate = new ListObjectsRequest()
+	/*	ListObjectsRequest listObjectsRequestIntermediate = new ListObjectsRequest()
 				.withBucketName(intermediateBucketName);
 		ObjectListing objectListingIntermediate;
 		do {
@@ -217,7 +237,7 @@ public class Master {
 			System.out.println("NUMBER OF KEYS = " +mrKeys.size());
 			listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
 		} while (objectListingIntermediate.isTruncated());
-		
+		*/
 
 		//----------------------------------------------------------------------------------------
 		//										REDUCER PHASE
@@ -235,6 +255,7 @@ public class Master {
 
 	// COMMUNICATE THE MESSAGE ACROSS NETWORK
 	public static void dispatchSendMessage(String dns, int port, String message) throws UnknownHostException, IOException{
+		System.out.println(message);
 		Socket clientSocket = new Socket(dns, port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');

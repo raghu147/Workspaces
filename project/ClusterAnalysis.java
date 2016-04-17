@@ -12,7 +12,7 @@ import java.util.Map;
 public class ClusterAnalysis  {
 	//Mapper Class
 	public static class M { 
-		public static void map(LongWritable key, Text value, Context context) 
+		public void map(LongWritable key, Text value, Context context) 
 				throws IOException, InterruptedException {
 			
 			String row=value.toString();//Get rows of data
@@ -25,7 +25,7 @@ public class ClusterAnalysis  {
 					//System.out.println(column);
 
 					if(!checkSanity(column)){ //Check for sanity
-						if (true){ //Send only 2015 values to reducer
+						if (column[0].equals("2015")){ //Send only 2015 values to reducer
 							String newkey = column[6];
 							String newvalue = column[2] + "#" + column[6] + "#" + column[109];
 							context.write(new Text(newkey),new Text(newvalue));
