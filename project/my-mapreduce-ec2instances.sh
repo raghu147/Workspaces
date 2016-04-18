@@ -1,3 +1,4 @@
+	# TO RUN: ./my-mapreduce.sh <jar-name>	
 	#----------------------------------------
 	output=project-bucket-cs6240-out
 	input=airline6240
@@ -10,7 +11,7 @@
 
 
 	portArray=()
-	slaveport=18000
+	slaveport=19000
 
 	#Makefile clean command
 	for i in $(echo $listOfDNS | tr " " "\n")
@@ -23,7 +24,8 @@
 	do
  	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean"
 	done
-=
+
+	make clean
 	
 	#create temp folder in every instance
 	
@@ -39,8 +41,8 @@
 	do
 	if [ $serverNumber -ne 0 ]
 	then
-	echo "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp missed.jar Slave $slaveport\"" 
-	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp missed.jar Slave $slaveport" 
+
+	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp $1 Slave $slaveport" 
 	fi
 	  serverNumber=$(($serverNumber+1))  
 	  portArray+=($slaveport)
@@ -52,11 +54,10 @@
 	do
 	if [ $serverNumber -eq 0 ]
 	then 
-	echo "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp missed.jar Master  $((machines-1)) $input $intermediate $output $master_port ${portArray[@]} "
-	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp missed.jar Master $((machines-1)) $input $intermediate $output ${portArray[@]} 
+	
+	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp $1 Master $((machines-1)) $input $intermediate $output ${portArray[@]} 
 	fi
 	serverNumber=$(($serverNumber+1))
 	done
-
 
 
