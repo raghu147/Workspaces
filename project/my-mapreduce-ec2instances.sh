@@ -23,8 +23,7 @@
 	do
  	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean"
 	done
-
-	make clean
+=
 	
 	#create temp folder in every instance
 	
