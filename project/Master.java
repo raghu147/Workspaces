@@ -8,7 +8,6 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
@@ -31,14 +30,13 @@ public class Master {
 
 		String dns_file_path = "publicDNS.txt";
 		List<Integer> serverPortList = new ArrayList<Integer>();
-		HashSet<String> mrKeys = new HashSet<String>();
 		String[] serverDNSList = null;
 		String server_port_dns="";
 
 		double totalSize = 0.0;
 		//int blockSize = 128;
 		int blockSize = 10;
-		
+
 		int totalNumOfMappers = 0;
 		int factor = 0;
 		int diff = 0;
@@ -46,6 +44,7 @@ public class Master {
 		int startFileIndex = 0;
 		int endFileIndex = 0;
 		int file_factor = 0;
+		int mappersToRead = 0;
 		HashMap<Integer, String> slaveInfo = new HashMap<Integer, String>();
 
 		// Read the DNS file, and store it in a string(contains dns of all machines)
@@ -77,8 +76,8 @@ public class Master {
 		//----------------------------------------------------------------------------------------
 		//										MAPPER PHASE
 		//----------------------------------------------------------------------------------------
-		
-		
+
+
 		// Read S3 bucket to calculate size and number of files
 
 		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
@@ -108,7 +107,7 @@ public class Master {
 		file_factor = file_count / totalNumOfMappers;
 		if(file_factor==0)
 			totalNumOfMappers=file_count;
-		
+
 		factor = totalNumOfMappers / numOfMachines;
 		diff = totalNumOfMappers - (factor * numOfMachines);
 		// Store mapper per machine info in a hashmap
@@ -116,7 +115,7 @@ public class Master {
 		if(file_factor==0)
 			endFileIndex=0;
 		else
-		endFileIndex = file_factor - 1;
+			endFileIndex = file_factor - 1;
 		int map_count = 1;
 		for(int i = 1; i<= numOfMachines;i++)
 		{
@@ -134,7 +133,7 @@ public class Master {
 					if(file_factor==0)
 						endFileIndex+=1;
 					else
-					endFileIndex += file_factor;
+						endFileIndex += file_factor;
 				}
 				slaveInfo.put(i, map_info.substring(0,map_info.length()-1));
 			}
@@ -150,34 +149,32 @@ public class Master {
 					if(file_factor==0)
 						endFileIndex+=1;
 					else
-					endFileIndex += file_factor;
+						endFileIndex += file_factor;
 				}
 				if(!map_info.isEmpty())
 					slaveInfo.put(i, map_info.substring(0,map_info.length()-1));
 			}
 		}
 
-		
+
 		// Broadcast input, output bucket info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "BUCKET_INFO:"+inputBucketName+","+intermediateBucketName +","+outputBucketName);
 
 		Thread.sleep(1000);
-		
+
 		// Broadcast server_port_dns info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "SERVER_PORT_DNS_LIST:"+server_port_dns);
 
-		Thread.sleep(1000);
-		
 		// Broadcast slave info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 		{
 			if(slaveInfo.get(i) != null)
-				
 				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i));
 		}
-		
+
+		System.out.println("Started Mapper phase....");
 
 		ServerSocket serverSock = null;
 		Socket s = null;
@@ -190,26 +187,149 @@ public class Master {
 			while(true)
 			{
 				for(int i = 1;i  <  serverPortList.size(); i++)
-					dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "GET_STATUS:");
+					dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "GET_MAPPER_STATUS:");
 				s = serverSock.accept();
 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
 				String line = inFromClient.readLine();
 
-				if(line.startsWith("SENDING_STATUS"))
+				if(line.startsWith("SENDING_MAPPER_STATUS"))
+				{
+					stop_count += Integer.parseInt(line.split(":")[1]);
+					mappersToRead += Integer.parseInt(line.split(":")[2]);
+				}
+				System.out.println(stop_count + "========= Stop Count");
+				if(stop_count == numOfMachines)
+				{
+					// Mapper phase in all machines is done
+					break;
+				}
+				Thread.sleep(11000);
+			}
+			System.out.println("Finished Mapper phase.....");
+			s.close();
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+
+		System.out.println("Starting Intermediate phase...Shuffle and Sort...");
+
+		//----------------------------------------------------------------------------------------
+		//										INTERMEDIATE PHASE
+		//----------------------------------------------------------------------------------------
+
+
+		ArrayList<String> mrKeys = new ArrayList<String>();
+
+		// Read intermediate S3 bucket to get mapper files and calculate number of keys
+
+		ListObjectsRequest listObjectsRequestIntermediate = new ListObjectsRequest()
+				.withBucketName(intermediateBucketName);
+		ObjectListing objectListingIntermediate;
+		int m_count;
+		do {
+			m_count = 0;
+			do {
+				objectListingIntermediate = s3Client.listObjects(listObjectsRequestIntermediate);
+				for (S3ObjectSummary objectSummary : 
+					objectListingIntermediate.getObjectSummaries()) {
+					String key=objectSummary.getKey();
+					String key_value = key.split("_")[1];
+					m_count++;
+					if(!mrKeys.contains(key_value))
+						mrKeys.add(key_value);
+				}
+				listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
+			} while (objectListingIntermediate.isTruncated());
+		}while(mappersToRead!=m_count);
+
+		System.out.println("NUMBER OF KEYS = " +mrKeys.size());
+		
+		//----------------------------------------------------------------------------------------
+		//										REDUCER PHASE
+		//----------------------------------------------------------------------------------------
+		System.out.println("Starting Reducer Phase.....");
+		
+		// Distribute all the keys among reducers present in different machines
+
+		int reducersPerMachine = 0;
+		int reducerDiff = 0;
+		int reducer_number = 0;
+		HashMap<Integer, String> slaveReducerInfo = new HashMap<Integer, String>();
+		int allKeys = mrKeys.size();
+
+		reducersPerMachine = allKeys/numOfMachines;
+		if(reducersPerMachine == 0)
+		{
+			reducersPerMachine = 1;
+			reducerDiff = 0;
+		}
+		else
+			reducerDiff = allKeys - (reducersPerMachine * numOfMachines);
+
+		for(int i = 1; i<= numOfMachines;i++)
+		{
+			if(reducer_number <= allKeys)
+			{
+				if(i == numOfMachines)
+				{
+					int reducers = (reducersPerMachine + reducerDiff);
+					String reducer_info = "";
+					for(int j = 1; j<=reducers; j++)
+					{
+						reducer_info += mrKeys.get(reducer_number) + "," + (reducer_number + 1) + "#";
+						reducer_number ++;
+					}
+					slaveReducerInfo.put(i, reducer_info.substring(0,reducer_info.length()-1));
+				}
+				else
+				{
+					String reducer_info = "";
+					for(int j=1; j<=reducersPerMachine; j++)
+					{
+						reducer_info += mrKeys.get(reducer_number) + "," + (reducer_number + 1) + "#";
+						reducer_number ++;
+					}
+					if(!reducer_info.isEmpty())
+						slaveReducerInfo.put(i, reducer_info.substring(0,reducer_info.length()-1));
+				}
+			}
+		}
+
+		// Start Reducer phase
+		for(int i = 1;i  <  serverPortList.size(); i++)
+			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+slaveReducerInfo.get(i));
+
+
+		// Keep Listening to all the slaves to check if mappers finished their jobs
+
+		try
+		{
+			int stop_count = 0;
+			System.out.println("Server listening at port: "+masterPort);
+			while(true)
+			{
+				for(int i = 1;i  <  serverPortList.size(); i++)
+					dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "GET_REDUCER_STATUS:");
+				s = serverSock.accept();
+				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(s.getInputStream()));
+				String line = inFromClient.readLine();
+
+				if(line.startsWith("SENDING_REDUCER_STATUS"))
 				{
 					stop_count += Integer.parseInt(line.split(":")[1]);
 				}
 				System.out.println(stop_count + "========= Stop Count");
 				if(stop_count == numOfMachines)
 				{
-					// Kill machines
+					// Reducer phase of all machines is done
 					for(int i = 1;i  <  serverPortList.size(); i++)
 						dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
 					break;
 				}
 				Thread.sleep(11000);
 			}
-			Thread.sleep(21000);
 			s.close();
 			serverSock.close();
 		}
@@ -218,44 +338,11 @@ public class Master {
 			e.printStackTrace();
 		}
 
-
-		//----------------------------------------------------------------------------------------
-		//										INTERMEDIATE PHASE
-		//----------------------------------------------------------------------------------------
-
-		// Read intermediate S3 bucket to get mapper files and calculate number of keys
-	/*	ListObjectsRequest listObjectsRequestIntermediate = new ListObjectsRequest()
-				.withBucketName(intermediateBucketName);
-		ObjectListing objectListingIntermediate;
-		do {
-			objectListingIntermediate = s3Client.listObjects(listObjectsRequestIntermediate);
-			for (S3ObjectSummary objectSummary : 
-				objectListingIntermediate.getObjectSummaries()) {
-				String key=objectSummary.getKey();
-				mrKeys.add(key.split("_")[1]);
-			}
-			System.out.println("NUMBER OF KEYS = " +mrKeys.size());
-			listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
-		} while (objectListingIntermediate.isTruncated());
-		*/
-
-		//----------------------------------------------------------------------------------------
-		//										REDUCER PHASE
-		//----------------------------------------------------------------------------------------
-		
-		/*String message[] = {"","hi","hello"};
-		for(int i = 1;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+message[i]);
-
-		for(int i = 1;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "KILL_YOURSELF:");
-		 */
-		
+		System.out.println("Finished all Phases.....Congratulations.....");
 	}
 
 	// COMMUNICATE THE MESSAGE ACROSS NETWORK
 	public static void dispatchSendMessage(String dns, int port, String message) throws UnknownHostException, IOException{
-		System.out.println(message);
 		Socket clientSocket = new Socket(dns, port);
 		DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
 		outToServer.writeBytes(message + '\n');

@@ -1,14 +1,9 @@
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.io.FilenameFilter;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.transfer.TransferManager;
@@ -86,10 +81,8 @@ class Job {
 
 class Context {
 
-	Map<Text, List<Text>> dict;
-
-	List<Text> result;
-	//HashMap<Text, ArrayList<Text>> mapperData = new HashMap<Text, ArrayList<Text>>();
+	static final Object lock = new Object();
+	String reducerData;
 	HashMap<String, ArrayList<String>> mapperData ;
 
 	int mrNumber;
@@ -101,8 +94,7 @@ class Context {
 
 	public Context(int mrNumber,int contextType,Text key,String outputBucketName) {
 
-		this.dict = new TreeMap<Text, List<Text>>();
-		this.result = new ArrayList<Text>();
+		this.reducerData = "";
 		this.mrNumber = mrNumber;
 		this.contextType = contextType;
 		this.key = key;
@@ -110,16 +102,14 @@ class Context {
 		this.mapperData = new HashMap<String, ArrayList<String>>();
 	}
 
-	public void write(Text key, Text val) {
+	public void write(Text mrkey, Text val) {
 
-		
+
 		if(contextType == REDUCER_TYPE){
-
-			result.add(val);
-
+			reducerData = key.toString() + ", " + val.toString();
 		}
 		else{
-			String key1 = key.toString();
+			String key1 = mrkey.toString();
 			String val1 = val.toString();
 			if(mapperData.containsKey(key1))
 			{
@@ -133,21 +123,20 @@ class Context {
 				value.add(val1);
 				mapperData.put(key1, value);
 			}
-
 		}
-		
-		
-
 	}
 
 	public void writeToDisk(int mrNumber) throws IOException {
 
 
 		if(contextType == REDUCER_TYPE){
+			TransferManager rtx = new TransferManager(
+					new ProfileCredentialsProvider());
+
 			File partFile = null;
 			try {
 
-				partFile = new File("out/part-r-"+key);
+				partFile = new File("reducer-temp/part-r-"+key);
 
 				if (!partFile.exists()) {
 					partFile.createNewFile();
@@ -156,27 +145,17 @@ class Context {
 				FileWriter fw = new FileWriter(partFile.getAbsoluteFile());
 				BufferedWriter bw = new BufferedWriter(fw);
 
-				for(Text t : result){
-					bw.write(key.toString()+","+t.toString());
-				}
+				bw.write(reducerData);
 
 				bw.close();
 				fw.close();
 
-				System.out.println("Wrote partfile to disk");
-
 			} catch (IOException e) {
 				e.printStackTrace();
-
 			}
 
-			TransferManager rtx = new TransferManager(
-					new ProfileCredentialsProvider());
-
-
+			// Upload the part file to bucket
 			rtx.upload(outputBucketName, partFile.getName()+".txt", partFile);
-
-			System.out.println("Uploaded part file to bucket");
 
 		}
 		else
@@ -184,15 +163,12 @@ class Context {
 			TransferManager mtx = new TransferManager(
 					new ProfileCredentialsProvider());
 			// Create separate file for each key
-			//PrintWriter mapperPartFile = null;
 			File mapperPartFile = null;
-			System.out.println("Trying to write for:"+mrNumber);
 			FileWriter fw;
 			BufferedWriter bw = null; 
 			for(String key: mapperData.keySet())
 			{
-				//partFile = new File("out/part-r-"+key);
-				mapperPartFile = new File("temp/M"+mrNumber+"_"+key+"_.txt");
+				mapperPartFile = new File("mapper-temp/M"+mrNumber+"_"+key+"_.txt");
 
 				if (!mapperPartFile.exists()) {
 					mapperPartFile.createNewFile();
@@ -204,43 +180,22 @@ class Context {
 				for(String v : eachVal)
 				{
 					bw.write(v+"\n");
-					
-					
 				}
-				
-
 				bw.close();
 				fw.close();
-				
-			
 			}
-			
-		
-		
-		
+
 			// Push all the mapper files onto intermediate bucket
-			
-			System.out.println("Finished writing mapper files into local disk");
-			/*
-			 * 
-			
-			File dir = new File(".");
-			File [] files = dir.listFiles(new FilenameFilter() {
-			    @Override
-			    public boolean accept(File dir, String name) {
-			        return name.endsWith(".txt");
-			    }
-			});
+
+			File dir = new File("mapper-temp/");
+			File [] files = dir.listFiles();
 			for (File mapperFile : files) {
-				if(!mapperFile.getName().equals("publicDNS.txt"))
-				{
-					mtx.upload(outputBucketName, mapperFile.getName(), mapperFile);
-				}
-			} */
-			System.out.println("Finished pushing mapper files into S3 intermediate bucket");
+				mtx.upload(outputBucketName, mapperFile.getName(), mapperFile);
+			}
+			synchronized(lock)
+			{
+				Slave.allMapperFileCount += files.length;
+			}
 		}
-
 	}
-
-
 }

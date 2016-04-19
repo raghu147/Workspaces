@@ -22,13 +22,17 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class Slave {
 	static HashMap<Integer, String> ser_port_hash = new HashMap<Integer, String>();
+	static int allMapperFileCount = 0;
 	static int mapperCount = 0;
-	static int mapperFinisedCount = 0;
+	static int reducerCount = 0;
+	static int reducerFinishedCount = 0;
+	static int mapperFinishedCount = 0;
 
 	public static void main(String[] args) {
 		int port = Integer.parseInt(args[0]);
 		String inputBucket ="";
-		int already_sent = 0;
+		int already_sent_mapper = 0;
+		int already_sent_reducer = 0;
 		String outputBucket = "";
 		String intermediateBucket = "";
 		ServerSocket serverSock = null;
@@ -69,17 +73,33 @@ public class Slave {
 					mt.start();
 				}
 
-				if(line.startsWith("GET_STATUS"))
+				if(line.startsWith("GET_MAPPER_STATUS"))
 				{
 					Socket clientSocket = new Socket(ser_port_hash.get(0).split("#")[1], Integer.parseInt(ser_port_hash.get(0).split("#")[0]));
 					DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
-					if(((mapperCount == mapperFinisedCount) || mapperCount == 0) && already_sent == 0)
+					if(((mapperCount == mapperFinishedCount) || mapperCount == 0) && already_sent_mapper == 0)
 					{
-						outToServer.writeBytes("SENDING_STATUS:"+ 1 +"\n");
-						already_sent = 1;
+						outToServer.writeBytes("SENDING_MAPPER_STATUS:"+ "1"  + ":" + allMapperFileCount +"\n");
+						already_sent_mapper = 1;
 					}
 					else
-						outToServer.writeBytes("SENDING_STATUS:"+ 0 +"\n");
+						outToServer.writeBytes("SENDING_MAPPER_STATUS:"+ "0" + ":" + "0" +"\n");
+					outToServer.flush();
+					outToServer.close();
+					clientSocket.close();
+				}
+
+				if(line.startsWith("GET_REDUCER_STATUS"))
+				{
+					Socket clientSocket = new Socket(ser_port_hash.get(0).split("#")[1], Integer.parseInt(ser_port_hash.get(0).split("#")[0]));
+					DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+					if(((reducerCount == reducerFinishedCount) || reducerCount == 0) && already_sent_reducer == 0)
+					{
+						outToServer.writeBytes("SENDING_REDUCER_STATUS:"+ "1" +"\n");
+						already_sent_reducer = 1;
+					}
+					else
+						outToServer.writeBytes("SENDING_REDUCER_STATUS:"+ "0" +"\n");
 					outToServer.flush();
 					outToServer.close();
 					clientSocket.close();
@@ -91,7 +111,7 @@ public class Slave {
 				}
 
 				if(line.startsWith("DO_REDUCE")){
-
+					reducerCount = line.split("#").length;
 					ReducerThread robj = new ReducerThread(intermediateBucket,outputBucket,line.split(":")[1]);
 					Thread rt = new Thread(robj);
 					rt.start();
@@ -153,7 +173,7 @@ class MapperThread extends Thread{
 			MapperTask mtask = new MapperTask(mapIndex.split(",")[0], mapIndex.split(",")[1], mapIndex.split(",")[2], inputMapperPath, interMapperPath, ctx);
 			Thread mtT = new Thread(mtask);
 			mtT.start();
-			
+
 			mCount++;
 		}
 	}
@@ -189,13 +209,8 @@ class MapperTask extends Thread{
 		Method method = null;
 		try 
 		{
-			//c = Class.forName("Alice$M");
-			c = Class.forName("ClusterAnalysis$M");
-			
+			c = Class.forName("Alice$M");
 			method = c.getMethod("map",new Class[] { LongWritable.class, Text.class, Context.class});
-			
-			
-
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (NoSuchMethodException e) {
@@ -208,19 +223,13 @@ class MapperTask extends Thread{
 
 		/* Read from each key(file) that this server is supposed to read */
 		for(int i=startIndex;i<=endIndex;i++){
-			System.out.println(MapperThread.bucketKeys.get(i)+"FILENAME");
 			S3Object s3object = MapperThread.s3Client.getObject(new GetObjectRequest(
 					inputMapPath, MapperThread.bucketKeys.get(i)));
-			System.out.println("Content-Type: "  + 
-					s3object.getObjectMetadata().getContentType());
 
 			// Get a range of bytes from an object.
 			GetObjectRequest rangeObjectRequest = new GetObjectRequest(
 					inputMapPath, MapperThread.bucketKeys.get(i));
 			rangeObjectRequest.setRange(0, 10);
-
-			System.out.println("Printing bytes retrieved.");
-			System.out.println(mapperNumber+"::"+s3object.getObjectContent()+"filename");
 
 			GZIPInputStream gzin = null;
 			try {
@@ -232,12 +241,10 @@ class MapperTask extends Thread{
 			InputStreamReader decoder = new InputStreamReader(gzin);
 			reader = new BufferedReader(decoder);
 			String readline ="";
-			int lineCount = 0;
 			try {
 				while((readline = reader.readLine()) != null)
 				{
 					try {
-						//System.out.println("Line "+ mapperNumber + " "+ readline);
 						method.invoke(c.newInstance(), new LongWritable(""), new Text(readline), ctx);
 					} catch (IllegalAccessException e) {
 						e.printStackTrace();
@@ -248,117 +255,120 @@ class MapperTask extends Thread{
 					} catch (InstantiationException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
-					} 
-					/*if(++lineCount==10)
-						break; */
-					
-					
+					}
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-
-		
 		}
-		
+
 		try {
 			ctx.writeToDisk(mapperNumber);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
+
 		// Increment mapperFinishedCount variable
 		synchronized (lock) {
-			Slave.mapperFinisedCount++;
+			Slave.mapperFinishedCount++;
 		}
 	}
 
 }
 
-// Reducer Thread
+//Reducer Thread
 class ReducerThread extends Thread{
 
-	List<String> keyList;
+	public static AmazonS3 s3RedcerClient = new AmazonS3Client(new ProfileCredentialsProvider());
+	public static HashMap<String, ArrayList<String>> reducerKeyMap = new HashMap<String, ArrayList<String>>();
 	String outputPath ;
 	String inputPath;
-	String message;
+	String reducer_info;
 
 
 	public ReducerThread(String inputPath,String outputPath,String message){
 		this.outputPath = outputPath;
 		this.inputPath = inputPath;
-		this.message = message;
-		keyList = new ArrayList<String>();
-
+		this.reducer_info = message;
 	}
 
 	public void run(){
-
-
-
-		if(message.contains("#")){
-
-			String splits[] = message.split("#");
-
-			for(String x : splits){
-				keyList.add(x);
+		/* Get Keys */
+		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+				.withBucketName(inputPath);
+		ObjectListing objectListing;     
+		// Get list of all files from bucket and store them in a ArrayList
+		do {
+			objectListing = s3RedcerClient.listObjects(listObjectsRequest);
+			for (S3ObjectSummary objectSummary : 
+				objectListing.getObjectSummaries()) {
+				String key=objectSummary.getKey();
+				String key_stripped = key.split("_")[1];
+				if(!reducerKeyMap.containsKey(key_stripped))
+				{
+					ArrayList<String> rKeys = new ArrayList<String>();
+					rKeys.add(key);
+					reducerKeyMap.put(key_stripped, rKeys);
+				}
+				else
+				{
+					ArrayList<String> erKeys = reducerKeyMap.get(key_stripped);
+					erKeys.add(key);
+					reducerKeyMap.put(key_stripped, erKeys);
+				}
 			}
+			listObjectsRequest.setMarker(objectListing.getNextMarker());
+		} while (objectListing.isTruncated());
 
+		// Start all the reducer threads
+		String[] listReducerIndex = reducer_info.split("#");
+
+		int rCount = 0;
+		for(String reducerIndex : listReducerIndex)
+		{
+			Context rctx = new Context(rCount, Context.REDUCER_TYPE, new Text(reducerIndex.split(",")[0]), outputPath);
+			ReducerTask rtask = new ReducerTask(reducerIndex.split(",")[0], reducerIndex.split(",")[1], reducerKeyMap.get(reducerIndex.split(",")[0]), inputPath,rctx);
+			Thread rtT = new Thread(rtask);
+			rtT.start();
+			rCount++;
 		}
-		else{
-			keyList.add(message);
-		}
-
-		for(String key : keyList){
-
-			// For each key create a Reducer
-			Context ctx = new Context(0, Context.REDUCER_TYPE, new Text(key),outputPath);
-			ReducerTask rtask = new ReducerTask(inputPath,outputPath,key,ctx);
-			Thread rt = new Thread(rtask);
-			rt.start();
-		}
-
 
 	}
 
 }
 
 
-// One reducer
+//One reducer
 class ReducerTask extends Thread{
 
-	static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
-	String fileKey;
+	static final Object lock = new Object();
+	BufferedReader reader = null;
+	List<Text> values = null;
+	String key;
+	int rNumber;
+	ArrayList<String> fileList = null;
 	String inputPath;
-	String outputPath;
 	Context context;
 
 
-	public ReducerTask(String inputPath,String outputPath,String key,Context ctx){
-		this.outputPath = outputPath;
+	public ReducerTask(String key, String rNumber, ArrayList<String> fileList, String inputPath, Context ctx){
+		this.key = key;
+		this.values = new ArrayList<Text>();
+		this.rNumber = Integer.parseInt(rNumber);
+		this.fileList = fileList;
 		this.inputPath = inputPath;
-		this.fileKey = key;
 		this.context = ctx;
 
 	}
 	public void run(){
 
-		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(inputPath);
-		ObjectListing objectListing;
-
-
 		//Create object
 		Class<?> c = null;
 		Method method = null;
 		try {
-
-
 			c = Class.forName("Alice$R");
-			method = c.getMethod("reduce",new Class[] { Text.class,List.class,Context.class});
-
-
+			method = c.getMethod("reduce",new Class[] { Text.class, List.class, Context.class});
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (NoSuchMethodException e) {
@@ -369,65 +379,52 @@ class ReducerTask extends Thread{
 			e.printStackTrace();
 		}
 
+		/* Read from each key(file) that this server is supposed to read */
+		for(int i=0; i< fileList.size(); i++){
+			S3Object s3object = ReducerThread.s3RedcerClient.getObject(new GetObjectRequest(
+					inputPath, fileList.get(i)));
 
+			// Get a range of bytes from an object.
+			GetObjectRequest rangeObjectRequest = new GetObjectRequest(
+					inputPath, fileList.get(i));
+			rangeObjectRequest.setRange(0, 10);
 
-		List<String> fileList = new ArrayList<String>();
-
-		do {
-			objectListing = s3Client.listObjects(listObjectsRequest);
-			for (S3ObjectSummary objectSummary : 
-				objectListing.getObjectSummaries()) {
-
-				String fileName=objectSummary.getKey();
-				System.out.println(fileName);
-				if(fileName.equals("project-bucket-cs6240-int/"))
-					continue;
-
-
-				if(fileName.split("_")[0].equals(fileKey)){			
-					fileList.add(fileName);					
-
-				}
-
-			}
-
-			listObjectsRequest.setMarker(objectListing.getNextMarker());
-		} while (objectListing.isTruncated());
-
-
-
-		List<Text> toReducer = new ArrayList<Text>();
-
-		for(String f : fileList){
-			S3Object s3object = s3Client.getObject(new GetObjectRequest(
-					"project-bucket-cs6240-int", f));
-
-			System.out.println("F="+f);
-			BufferedReader reader = new BufferedReader(new InputStreamReader(s3object.getObjectContent()));
-			String line;
+			InputStreamReader decoder = new InputStreamReader(s3object.getObjectContent());
+			reader = new BufferedReader(decoder);
+			String readline;
 			try {
-				while((line = reader.readLine()) != null) {
-					toReducer.add(new Text(line));
+				while((readline = reader.readLine()) != null)
+				{
+					Text val = new Text(readline);
+					values.add(val);
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-
 		}
 
 		try {
-			method.invoke(c, new Text(fileKey),toReducer,context);
+			method.invoke(c.newInstance(), new Text(key), values, context);
 		} catch (IllegalAccessException e) {
 			e.printStackTrace();
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
 		} catch (InvocationTargetException e) {
 			e.printStackTrace();
+		} catch (InstantiationException e) {
+			e.printStackTrace();
 		}
 
-		//context.writeToDisk();
+		try {
+			context.writeToDisk(rNumber);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 
+		// Increment reducerFinishedCount variable
+		synchronized (lock) {
+			Slave.reducerFinishedCount++;
+		}
 	}
-
 
 }
