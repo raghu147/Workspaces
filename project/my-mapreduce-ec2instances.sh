@@ -1,8 +1,8 @@
-	# TO RUN: ./my-mapreduce.sh <jar-name>	
+	# TO RUN: ./my-mapreduce.sh <reflection-class-name> <inputpath> <outputpath>	TODO:pass reflection class as jar 
 	#----------------------------------------
 	output=project-bucket-cs6240-out
 	input=airline6240
-	intermediate=project-bucket-cs6240-int
+	intermediate=testint6240
 	#---------------------------------------- 
 
 
@@ -11,22 +11,17 @@
 
 
 	portArray=()
-	slaveport=19000
+	slaveport=20000
 
-	#Makefile clean command
-	for i in $(echo $listOfDNS | tr " " "\n")
-	do
-  	scp -oStrictHostKeyChecking=no  -i "key.pem" Makefile ec2-user@$i:~
-	done
+	
 
-	#create .aws folder in every instance
+	#make clean in every instance
 	for i in $(echo $listOfDNS | tr " " "\n")
 	do
  	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean"
 	done
 
-	make clean
-	
+
 	#create temp folder in every instance
 	
 	for i in $(echo $listOfDNS | tr " " "\n")
@@ -41,8 +36,8 @@
 	do
 	if [ $serverNumber -ne 0 ]
 	then
-
-	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp $1 Slave $slaveport" 
+	
+	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp framework.jar Slave $slaveport" 
 	fi
 	  serverNumber=$(($serverNumber+1))  
 	  portArray+=($slaveport)
@@ -54,8 +49,8 @@
 	do
 	if [ $serverNumber -eq 0 ]
 	then 
-	
-	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp $1 Master $((machines-1)) $input $intermediate $output ${portArray[@]} 
+		#Args: $1= Reflection class,no.machines,$2=inputpath,$3=outputpath
+	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp framework.jar Master $1 $((machines-1)) $2 $intermediate $3 ${portArray[@]} 
 	fi
 	serverNumber=$(($serverNumber+1))
 	done
