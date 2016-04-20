@@ -22,11 +22,12 @@ public class Master {
 	public static void main(String arg[]) throws UnknownHostException, IOException, InterruptedException
 	{
 		// Arguments: totalMachines input intermediate output masterport port1 port2 ....
-		int numOfMachines = Integer.parseInt(arg[0]);
-		String inputBucketName = arg[1];
-		String intermediateBucketName = arg[2];
-		String outputBucketName = arg[3];
-		int masterPort = Integer.parseInt(arg[4]);
+		String classToExecute = arg[0];
+		int numOfMachines = Integer.parseInt(arg[1]);
+		String inputBucketName = arg[2];
+		String intermediateBucketName = arg[3];
+		String outputBucketName = arg[4];
+		int masterPort = Integer.parseInt(arg[5]);
 
 		String dns_file_path = "publicDNS.txt";
 		List<Integer> serverPortList = new ArrayList<Integer>();
@@ -60,7 +61,7 @@ public class Master {
 		}
 
 		// Copy all the ports into an ArrayList
-		for(int i = 4; i <  arg.length;i++){
+		for(int i = 5; i <  arg.length;i++){
 			serverPortList.add(Integer.parseInt(arg[i]));
 		}
 
@@ -171,7 +172,7 @@ public class Master {
 		for(int i = 1;i  <  serverPortList.size(); i++)
 		{
 			if(slaveInfo.get(i) != null)
-				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i));
+				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "MAPPER_INFO:"+slaveInfo.get(i)+":"+classToExecute);
 		}
 
 		System.out.println("Started Mapper phase....");
@@ -242,6 +243,7 @@ public class Master {
 				}
 				listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
 			} while (objectListingIntermediate.isTruncated());
+			System.out.println("Intermediate NUMBER OF KEYS, COUNT, MappersToRead = " +mrKeys.size() +","+m_count+","+mappersToRead);
 		}while(mappersToRead!=m_count);
 
 		System.out.println("NUMBER OF KEYS = " +mrKeys.size());

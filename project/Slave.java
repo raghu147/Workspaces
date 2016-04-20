@@ -23,6 +23,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 public class Slave {
 	static HashMap<Integer, String> ser_port_hash = new HashMap<Integer, String>();
 	static int allMapperFileCount = 0;
+	static String className = "";
 	static int mapperCount = 0;
 	static int reducerCount = 0;
 	static int reducerFinishedCount = 0;
@@ -68,6 +69,7 @@ public class Slave {
 
 				if(line.startsWith("MAPPER_INFO")){
 					mapperCount = line.split("#").length;
+					className = line.split(":")[2];
 					MapperThread mobj = new MapperThread(inputBucket, intermediateBucket, line.split(":")[1]);
 					Thread mt = new Thread(mobj);
 					mt.start();
@@ -209,7 +211,7 @@ class MapperTask extends Thread{
 		Method method = null;
 		try 
 		{
-			c = Class.forName("Alice$M");
+			c = Class.forName(Slave.className+"$M");
 			method = c.getMethod("map",new Class[] { LongWritable.class, Text.class, Context.class});
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
@@ -367,7 +369,7 @@ class ReducerTask extends Thread{
 		Class<?> c = null;
 		Method method = null;
 		try {
-			c = Class.forName("Alice$R");
+			c = Class.forName(Slave.className+"$R");
 			method = c.getMethod("reduce",new Class[] { Text.class, List.class, Context.class});
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
@@ -399,6 +401,12 @@ class ReducerTask extends Thread{
 					values.add(val);
 				}
 			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			try {
+				s3object.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
