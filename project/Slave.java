@@ -329,8 +329,8 @@ class ReducerThread extends Thread{
 		int rCount = 0;
 		for(String reducerIndex : listReducerIndex)
 		{
-			Context rctx = new Context(rCount, Context.REDUCER_TYPE, new Text(reducerIndex.split(",")[0]), outputPath);
-			ReducerTask rtask = new ReducerTask(reducerIndex.split(",")[0], reducerIndex.split(",")[1], reducerKeyMap.get(reducerIndex.split(",")[0]), inputPath,rctx);
+			Context rctx = new Context(rCount, Context.REDUCER_TYPE, new Text(reducerIndex.split("@")[0]), outputPath);
+			ReducerTask rtask = new ReducerTask(reducerIndex.split("@")[0], reducerIndex.split("@")[1], reducerKeyMap.get(reducerIndex.split("@")[0]), inputPath,rctx);
 			Thread rtT = new Thread(rtask);
 			rtT.start();
 			rCount++;

@@ -280,7 +280,7 @@ public class Master {
 					String reducer_info = "";
 					for(int j = 1; j<=reducers; j++)
 					{
-						reducer_info += mrKeys.get(reducer_number) + "," + (reducer_number + 1) + "#";
+						reducer_info += mrKeys.get(reducer_number) + "@" + (reducer_number + 1) + "#";
 						reducer_number ++;
 					}
 					slaveReducerInfo.put(i, reducer_info.substring(0,reducer_info.length()-1));
@@ -290,7 +290,7 @@ public class Master {
 					String reducer_info = "";
 					for(int j=1; j<=reducersPerMachine; j++)
 					{
-						reducer_info += mrKeys.get(reducer_number) + "," + (reducer_number + 1) + "#";
+						reducer_info += mrKeys.get(reducer_number) + "@" + (reducer_number + 1) + "#";
 						reducer_number ++;
 					}
 					if(!reducer_info.isEmpty())

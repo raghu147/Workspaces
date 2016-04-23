@@ -194,7 +194,7 @@ class Context {
 			}
 			synchronized(lock)
 			{
-				Slave.allMapperFileCount += files.length;
+				Slave.allMapperFileCount += mapperData.size();
 			}
 		}
 	}
