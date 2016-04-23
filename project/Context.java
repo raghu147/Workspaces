@@ -198,4 +198,68 @@ class Context {
 			}
 		}
 	}
+	
+	public void writeToLocalDisk(int mrNumber) throws IOException{
+		
+		if(contextType == MAPPER_TYPE){
+
+			// Create separate file for each key
+			File mapperPartFile = null;
+			FileWriter fw;
+			BufferedWriter bw = null; 
+			for(String key: mapperData.keySet())
+			{
+				mapperPartFile = new File(Pseudo.intermediateFolderPath+"/M"+mrNumber+"_"+key+"_.txt");
+
+				if (!mapperPartFile.exists()) {
+					mapperPartFile.createNewFile();
+				}
+
+				fw = new FileWriter(mapperPartFile.getAbsoluteFile());
+				bw = new BufferedWriter(fw);
+				ArrayList<String> eachVal = mapperData.get(key);
+				for(String v : eachVal)
+				{
+					bw.write(v+"\n");
+				}
+				bw.close();
+				fw.close();
+			}	
+			
+			synchronized (Pseudo.PSUEDO_MAPPERS_COMPLETED) {
+				Pseudo.PSUEDO_MAPPERS_COMPLETED++;
+			}
+			System.out.println("Finished mapper:"+mrNumber);
+		}
+		else{
+			
+			File partFile = null;
+			try {
+
+				partFile = new File(Pseudo.outputFolderPath+"/part-r-"+key);
+
+				if (!partFile.exists()) {
+					partFile.createNewFile();
+				}
+
+				FileWriter fw = new FileWriter(partFile.getAbsoluteFile());
+				BufferedWriter bw = new BufferedWriter(fw);
+
+				bw.write(reducerData);
+
+				bw.close();
+				fw.close();
+				
+				System.out.println("Finished Reducer:"+mrNumber);
+
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
+			synchronized (Pseudo.PSUEDO_REDUCERS_COMPLETED) {
+				Pseudo.PSUEDO_REDUCERS_COMPLETED++;
+			}
+		}
+		
+	}
 }
