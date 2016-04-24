@@ -1,4 +1,4 @@
-package org.mapreduce.myhadoop
+package org.mapreduce.myhadoop;
 
 import java.io.IOException;
 import java.util.ArrayList;
