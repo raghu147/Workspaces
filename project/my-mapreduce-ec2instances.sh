@@ -11,16 +11,18 @@
 
 
 	portArray=()
-	slaveport=20000
+	slaveport=10000
 
 	
 
 	#make clean in every instance
+	
+
 	for i in $(echo $listOfDNS | tr " " "\n")
 	do
- 	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean"
+ 	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean compile "
 	done
-
+	
 
 	#create temp folder in every instance
 	
@@ -37,7 +39,7 @@
 	if [ $serverNumber -ne 0 ]
 	then
 	
-	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp framework.jar Slave $slaveport" 
+	gnome-terminal -x bash -c "ssh -oStrictHostKeyChecking=no -i \"key.pem\" ec2-user@$i java -cp dist/framework.jar org.mapreduce.myhadoop.Slave $slaveport" 
 	fi
 	  serverNumber=$(($serverNumber+1))  
 	  portArray+=($slaveport)
@@ -50,7 +52,7 @@
 	if [ $serverNumber -eq 0 ]
 	then 
 		#Args: $1= Reflection class,no.machines,$2=inputpath,$3=outputpath
-	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp framework.jar Master $1 $((machines-1)) $2 $intermediate $3 ${portArray[@]} 
+	   ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i java -cp  dist/framework.jar org.mapreduce.myhadoop.Master $1 $((machines-1)) $2 $intermediate $3 ${portArray[@]} 
 	fi
 	serverNumber=$(($serverNumber+1))
 	done

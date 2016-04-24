@@ -1,6 +1,3 @@
-<!-- Before running: *.java in src/ and *.jar in lib/ -->
-<!--To run: ant  -->
-<!-- creates: framework.jar in dist/ -->
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <project name="framework" basedir="." default="jar">
     <property name="source.dir"     value="src"/>
@@ -31,9 +28,11 @@
     <target name="jar" depends="compile">
         <mkdir dir="${jar.dir}"/>
         <mkdir dir="${class.dir}/${lib.dir}"/>
+<!--
         <copy todir="${class.dir}/${lib.dir}" flatten="true">
             <path refid="libraries.path"/>
         </copy>
+-->
 
         <manifestclasspath property="manifest.classpath" jarfile="${jar.file}">
             <classpath refid="libraries.path"/>
@@ -41,10 +40,10 @@
 
         <jar destfile="${jar.file}" basedir="${class.dir}">
             <manifest>
-                <attribute name="Main-Class" value="${main-class}"/>
+              <!--  <attribute name="Main-Class" value="${main-class}"/> -->
                 <attribute name="Class-Path" value="${manifest.classpath}"/>
             </manifest>
-		 <zipgroupfileset dir="lib" includes="*.jar"/>
+		<!-- <zipgroupfileset dir="lib" includes="*.jar"/> -->
         </jar>  
     </target>
 
@@ -53,3 +52,4 @@
     </target>
 
 </project>
+
