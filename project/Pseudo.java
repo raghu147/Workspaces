@@ -20,15 +20,30 @@ import java.util.zip.GZIPInputStream;
 
 public class Pseudo{
 
-	public static Integer PSUEDO_MAPPERS_COMPLETED = 0;
-	public static Integer PSUEDO_REDUCERS_COMPLETED = 0;
-	public static String className = "ClusterAnalysis";
-	//public static String inputFolderPath = "input";
-	public static String inputFolderPath = "/home/raghu/Desktop/mr/assignments/small";
-	public static String intermediateFolderPath = "mapper-temp";
-	public static String outputFolderPath = "reducer-temp";
+	private static Integer PSUEDO_MAPPERS_COMPLETED = 0;
+	private static Integer PSUEDO_REDUCERS_COMPLETED = 0;
+	public static String className = "";
+	public static String inputFolderPath = "";
+	public static String intermediateFolderPath = "";
+	public static String outputFolderPath = "";
 	public static String inputType = "";
 
+	public static synchronized void reducerInc(){
+		PSUEDO_REDUCERS_COMPLETED++;
+	}
+	
+	public static synchronized int reducerGet(){
+		return PSUEDO_REDUCERS_COMPLETED;
+	}
+	
+	public static synchronized void mapperInc(){
+		PSUEDO_MAPPERS_COMPLETED++;
+	}
+	
+	public static synchronized int mapperGet(){
+		return PSUEDO_MAPPERS_COMPLETED;
+	}
+	
 	public static void init(){
 
 		File dir = new File(intermediateFolderPath);
@@ -59,9 +74,17 @@ public class Pseudo{
 
 	}
 
-	public static void pseudoMode(String arg[]){
+	
+	/* <MainClass> <Input> <Intermediate> <Output> */
+	public static void main(String arg[]){
 
-
+		
+		className = arg[0];
+		inputFolderPath = arg[1];
+		intermediateFolderPath = arg[2];
+		outputFolderPath = arg[3];
+		
+		
 		init();
 
 		Double BLOCK = 24.0;
@@ -176,16 +199,17 @@ public class Pseudo{
 			executor.execute(t);
 			
 		}
-
+		System.out.println("Number of Reducers="+numberOfReducers);
+		
 		while(true){
-
-			synchronized (PSUEDO_REDUCERS_COMPLETED) {
-				if(PSUEDO_REDUCERS_COMPLETED.intValue() >= numberOfReducers){
-					executor.shutdown();
+			
+				if(Pseudo.reducerGet() == numberOfReducers){
 					break;
 				}
-			}
+				
 		}
+		
+		executor.shutdown();
 
 		System.out.println("Finished Reducer Phase");
 
@@ -194,6 +218,8 @@ public class Pseudo{
 
 }
 
+
+/* <MainClass> <input-folder> <intermediate-folder> <out-put-folder> */
 class PseudoRedcuerThread implements Runnable{
 
 	List<String> filesToRead;
@@ -284,6 +310,8 @@ class PseudoRedcuerThread implements Runnable{
 			ctx.writeToLocalDisk(reducerNumber);
 		} catch (IOException e) {
 			e.printStackTrace();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
 
 	}
@@ -372,7 +400,11 @@ class PseudoMapperThread implements Runnable{
 		}
 
 		try {
-			ctx.writeToLocalDisk(mapperNumber);
+			try {
+				ctx.writeToLocalDisk(mapperNumber);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
