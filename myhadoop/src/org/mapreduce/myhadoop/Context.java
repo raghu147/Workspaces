@@ -156,7 +156,7 @@ class Context {
 			}
 
 			// Upload the part file to bucket
-			rtx.upload(outputBucketName, partFile.getName()+".txt", partFile);
+			rtx.upload(Slave.outBucket, partFile.getName()+".txt", partFile);
 
 		}
 		else
@@ -164,12 +164,14 @@ class Context {
 			TransferManager mtx = new TransferManager(
 					new ProfileCredentialsProvider());
 			// Create separate file for each key
+			ArrayList<String> filesCurrent = new ArrayList<String>();
 			File mapperPartFile = null;
 			FileWriter fw;
-			BufferedWriter bw = null; 
+			BufferedWriter bw = null;
 			for(String key: mapperData.keySet())
 			{
 				mapperPartFile = new File("mapper-temp/M"+mrNumber+"_"+key+"_.txt");
+				filesCurrent.add(mapperPartFile.getName());
 
 				if (!mapperPartFile.exists()) {
 					mapperPartFile.createNewFile();
@@ -191,16 +193,20 @@ class Context {
 			File dir = new File("mapper-temp/");
 			File [] files = dir.listFiles();
 			for (File mapperFile : files) {
-				mtx.upload(outputBucketName, mapperFile.getName(), mapperFile);
+				if(filesCurrent.contains(mapperFile.getName()))
+					mtx.upload(Slave.interBucket, mapperFile.getName(), mapperFile);
 			}
 			synchronized(lock)
 			{
 				Slave.allMapperFileCount += mapperData.size();
 			}
 		}
+		
+		
 	}
 	
-	public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedException{
+	
+public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedException{
 		
 		if(contextType == MAPPER_TYPE){
 
