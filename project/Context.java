@@ -199,7 +199,7 @@ class Context {
 		}
 	}
 	
-	public void writeToLocalDisk(int mrNumber) throws IOException{
+	public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedException{
 		
 		if(contextType == MAPPER_TYPE){
 
@@ -226,9 +226,9 @@ class Context {
 				fw.close();
 			}	
 			
-			synchronized (Pseudo.PSUEDO_MAPPERS_COMPLETED) {
-				Pseudo.PSUEDO_MAPPERS_COMPLETED++;
-			}
+				Pseudo.mapperInc();
+				
+			
 			System.out.println("Finished mapper:"+mrNumber);
 		}
 		else{
@@ -245,20 +245,18 @@ class Context {
 				FileWriter fw = new FileWriter(partFile.getAbsoluteFile());
 				BufferedWriter bw = new BufferedWriter(fw);
 
-				bw.write(reducerData);
+				bw.write(reducerData+"\n");
 
 				bw.close();
 				fw.close();
 				
-				System.out.println("Finished Reducer:"+mrNumber);
+				//System.out.println("Finished Reducer:"+mrNumber);
 
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 			
-			synchronized (Pseudo.PSUEDO_REDUCERS_COMPLETED) {
-				Pseudo.PSUEDO_REDUCERS_COMPLETED++;
-			}
+				Pseudo.reducerInc();
 		}
 		
 	}
