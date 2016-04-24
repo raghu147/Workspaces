@@ -1,9 +1,3 @@
-#make commands to convert class to respective jars: 
-#1. Alice Word Count (alice_count.jar)
-#2. Alice Median(alice_median.jar)
-#3. Cluster Analysis(cluster.jar)
-#4. Missed Connections (missed.jar)
-#5. Prediction and Routing(prediction.jar,routing.jar)
 
 
 make run
@@ -75,8 +69,15 @@ for i in $(echo $listOfDNS | tr " " "\n")
 do
   scp -oStrictHostKeyChecking=no -i "key.pem" dist/framework.jar ec2-user@$i:~/dist
 done
-echo "successfully transferred"
 
+
+#make clean compile in every instance
+	
+for i in $(echo $listOfDNS | tr " " "\n")
+do
+ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean compile "
+done
+echo "successfully transferred"
 
 
 

@@ -16,17 +16,17 @@ run: clean compile ant
  
 clean:
 	rm -f *.class
-	rm -rf lib	
+	#rm -rf lib	
 	rm -rf mapper-temp
 	rm -rf reducer-temp
 	rm -rf $(pintermediate)
 	rm -rf $(pout)
+	mkdir -p lib	
 	mkdir $(pout)
 	mkdir $(pintermediate)
-	mkdir lib
 	mkdir mapper-temp
 	mkdir reducer-temp
-	
+
 
 compile:
 

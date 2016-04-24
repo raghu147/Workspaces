@@ -11,20 +11,9 @@
 
 
 	portArray=()
-	slaveport=10000
+	slaveport=17000
 
 	
-
-	#make clean in every instance
-	
-
-	for i in $(echo $listOfDNS | tr " " "\n")
-	do
- 	ssh -oStrictHostKeyChecking=no -i "key.pem" ec2-user@$i "make clean compile "
-	done
-	
-
-	#create temp folder in every instance
 	
 	for i in $(echo $listOfDNS | tr " " "\n")
 	do
