@@ -1,8 +1,9 @@
-package org.mapreduce.myhadoop;
-
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.ServerSocket;
@@ -15,24 +16,61 @@ import java.util.List;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.transfer.TransferManager;
 
 public class Master {
 	static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
+
+	public static String splitBucketInfo(String bucket)
+	{
+		String truncatedBucketString = bucket.substring(5);
+
+
+		int firstSlash = truncatedBucketString.indexOf("/");
+
+		String bucketName = "";
+		String bucketprefix = "";
+
+		if(firstSlash != -1){
+
+			bucketName = truncatedBucketString.substring(0, firstSlash);
+			bucketprefix = truncatedBucketString.substring(firstSlash+1);
+
+			if(!bucketprefix.endsWith("/"))
+				bucketprefix += "/";
+		}
+		else{
+			bucketName = truncatedBucketString;
+			bucketprefix = "empty";
+		}
+		return bucketName+"#"+bucketprefix;
+
+	}
+
 	public static void main(String arg[]) throws UnknownHostException, IOException, InterruptedException
 	{
-		// Arguments: totalMachines input intermediate output masterport port1 port2 ....
+		// Arguments: ClassName totalMachines input intermediate output masterport port1 port2 ....
 		String classToExecute = arg[0];
 		int numOfMachines = Integer.parseInt(arg[1]);
-		String inputBucketName = arg[2];
-		String intermediateBucketName = arg[3];
-		String outputBucketName = arg[4];
+		String inputBucketName = splitBucketInfo(arg[2]);
+		String inputBucket = inputBucketName.split("#")[0];
+		String inputPrefix = inputBucketName.split("#")[1].equals("empty") ? "": inputBucketName.split("#")[1];
+		String intermediateBucketName = splitBucketInfo(arg[3]);
+		String interBucket = intermediateBucketName.split("#")[0];
+		String interPrefix = intermediateBucketName.split("#")[1].equals("empty") ? "": intermediateBucketName.split("#")[1];
+		String outputBucketName = splitBucketInfo(arg[4]);
+		String outputBucket = outputBucketName.split("#")[0];
+		String outputPrefix = outputBucketName.split("#")[1].equals("empty") ? "": outputBucketName.split("#")[1];
 		int masterPort = Integer.parseInt(arg[5]);
 
 		String dns_file_path = "publicDNS.txt";
 		List<Integer> serverPortList = new ArrayList<Integer>();
+		List<String> partFileList = new ArrayList<String>();
 		String[] serverDNSList = null;
 		String server_port_dns="";
 
@@ -83,16 +121,17 @@ public class Master {
 
 		// Read S3 bucket to calculate size and number of files
 
+
 		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(inputBucketName);
-		//.withPrefix("climate");
+				.withBucketName(inputBucket)
+				.withPrefix(inputPrefix);
 		ObjectListing objectListing;
 		do {
 			objectListing = s3Client.listObjects(listObjectsRequest);
 			for (S3ObjectSummary objectSummary : 
 				objectListing.getObjectSummaries()) {
-				String key=objectSummary.getKey();
-				if(key.equals("airline/"))
+				String key = objectSummary.getKey();
+				if(key.equals(inputPrefix))
 					continue;
 				totalSize += objectSummary.getSize();
 				file_count++;
@@ -164,7 +203,6 @@ public class Master {
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "BUCKET_INFO:"+inputBucketName+","+intermediateBucketName +","+outputBucketName);
 
-		Thread.sleep(1000);
 
 		// Broadcast server_port_dns info to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
@@ -200,7 +238,7 @@ public class Master {
 					stop_count += Integer.parseInt(line.split(":")[1]);
 					mappersToRead += Integer.parseInt(line.split(":")[2]);
 				}
-				System.out.println(stop_count + "========= Stop Count");
+				System.out.println(stop_count + " Machines done");
 				if(stop_count == numOfMachines)
 				{
 					// Mapper phase in all machines is done
@@ -228,7 +266,8 @@ public class Master {
 		// Read intermediate S3 bucket to get mapper files and calculate number of keys
 
 		ListObjectsRequest listObjectsRequestIntermediate = new ListObjectsRequest()
-				.withBucketName(intermediateBucketName);
+				.withBucketName(interBucket)
+				.withPrefix(interPrefix);
 		ObjectListing objectListingIntermediate;
 		int m_count;
 		do {
@@ -238,6 +277,8 @@ public class Master {
 				for (S3ObjectSummary objectSummary : 
 					objectListingIntermediate.getObjectSummaries()) {
 					String key=objectSummary.getKey();
+					if(key.equals(interPrefix))
+						continue;
 					String key_value = key.split("_")[1];
 					m_count++;
 					if(!mrKeys.contains(key_value))
@@ -245,16 +286,15 @@ public class Master {
 				}
 				listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
 			} while (objectListingIntermediate.isTruncated());
-			System.out.println("Intermediate NUMBER OF KEYS, COUNT, MappersToRead = " +mrKeys.size() +","+m_count+","+mappersToRead);
 		}while(mappersToRead!=m_count);
 
 		System.out.println("NUMBER OF KEYS = " +mrKeys.size());
-		
+
 		//----------------------------------------------------------------------------------------
 		//										REDUCER PHASE
 		//----------------------------------------------------------------------------------------
 		System.out.println("Starting Reducer Phase.....");
-		
+
 		// Distribute all the keys among reducers present in different machines
 
 		int reducersPerMachine = 0;
@@ -303,7 +343,10 @@ public class Master {
 
 		// Start Reducer phase
 		for(int i = 1;i  <  serverPortList.size(); i++)
-			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+slaveReducerInfo.get(i));
+		{
+			if(!(slaveReducerInfo.get(i) == null))
+				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+slaveReducerInfo.get(i));
+		}
 
 
 		// Keep Listening to all the slaves to check if mappers finished their jobs
@@ -321,10 +364,9 @@ public class Master {
 				String line = inFromClient.readLine();
 
 				if(line.startsWith("SENDING_REDUCER_STATUS"))
-				{
 					stop_count += Integer.parseInt(line.split(":")[1]);
-				}
-				System.out.println(stop_count + "========= Stop Count");
+
+				System.out.println(stop_count + " Machines done");
 				if(stop_count == numOfMachines)
 				{
 					// Reducer phase of all machines is done
@@ -342,7 +384,85 @@ public class Master {
 			e.printStackTrace();
 		}
 
+		System.out.println("Finished Reducer Phase....");
+		System.out.println("Combining all part files.....");
+		// COMBINING ALL PART FILES
+
+		ListObjectsRequest listObjectsRequestPart = new ListObjectsRequest()
+				.withBucketName(outputBucket)
+				.withPrefix(outputPrefix);
+		ObjectListing objectListingPart;
+		int part_count;
+		do {
+			part_count = 0;
+			do {
+				objectListingPart = s3Client.listObjects(listObjectsRequestPart);
+				for (S3ObjectSummary objectSummary : 
+					objectListingPart.getObjectSummaries()) {
+					String key=objectSummary.getKey();
+					if(key.equals(outputPrefix))
+						continue;
+					if(!partFileList.contains(key))
+						partFileList.add(key);
+				}
+				part_count += objectListingPart.getObjectSummaries().size();
+				listObjectsRequestPart.setMarker(objectListingPart.getNextMarker());
+			} while (objectListingPart.isTruncated());
+		}while(allKeys!=part_count);
+
+		System.out.println("Extracted all " + part_count + " Keys.");
+
+		/* 
+		 * Read from each key part file and create a single part file 
+		 */ 
+
+
+		TransferManager partTX = new TransferManager( new ProfileCredentialsProvider());
+
+		// Create a combined part file in local
+		File combinedPartFile = null;
+
+		combinedPartFile = new File("reducer-temp/part-r-00000");
+
+		if (!combinedPartFile.exists()) {
+			combinedPartFile.createNewFile();
+		}
+
+		FileWriter fw = new FileWriter(combinedPartFile.getAbsoluteFile());
+		BufferedWriter bw = new BufferedWriter(fw);
+
+		BufferedReader reader = null;
+		for(int i=0;i<allKeys;i++){
+			S3Object s3object = s3Client.getObject(new GetObjectRequest(
+					outputBucket, partFileList.get(i)));
+
+			// Get a range of bytes from an object.
+			GetObjectRequest rangeObjectRequest = new GetObjectRequest(
+					outputBucket, partFileList.get(i));
+			rangeObjectRequest.setRange(0, 10);
+
+			InputStreamReader decoder = null;
+			decoder = new InputStreamReader(s3object.getObjectContent());
+			reader = new BufferedReader(decoder);
+			String readline ="";
+			try {
+				while((readline = reader.readLine()) != null)
+				{
+					bw.write(readline+"\n");
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			s3object.close();
+		}
+		bw.close();
+		fw.close();
+
+		// Upload the part File into s3 bucket
+		partTX.upload(outputBucket, combinedPartFile.getName()+".txt", combinedPartFile).isDone();
 		System.out.println("Finished all Phases.....Congratulations.....");
+		Thread.sleep(2000);
+		System.exit(0);
 	}
 
 	// COMMUNICATE THE MESSAGE ACROSS NETWORK

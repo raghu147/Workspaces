@@ -1,5 +1,3 @@
-package org.mapreduce.myhadoop;
-
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -9,11 +7,12 @@ import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.GetObjectRequest;
@@ -23,21 +22,45 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class Slave {
+	public static ClientConfiguration clientConfig = new ClientConfiguration();
 	static HashMap<Integer, String> ser_port_hash = new HashMap<Integer, String>();
 	static int allMapperFileCount = 0;
 	static String className = "";
 	static int mapperCount = 0;
 	static int reducerCount = 0;
-	static int reducerFinishedCount = 0;
-	static int mapperFinishedCount = 0;
+	private static int reducerFinishedCount = 0;
+	private static int mapperFinishedCount = 0;
+	public static String inputBucket ="";
+	public static String inBucket = "";
+	public static String inPrefix = "";
+	public static String outputBucket = "";
+	public static String outBucket = "";
+	public static String outPrefix = "";
+	public static String intermediateBucket = "";
+	public static String interBucket = "";
+	public static String interPrefix = "";
+
+	public static synchronized int getReducerFinishedCount() {
+		return reducerFinishedCount;
+	}
+
+	public static synchronized void incReducerFinishedCount() {
+		Slave.reducerFinishedCount ++;
+	}
+
+	public static synchronized int getMapperFinishedCount() {
+		return mapperFinishedCount;
+	}
+
+	public static synchronized void incMapperFinishedCount() {
+		Slave.mapperFinishedCount++;
+	}
 
 	public static void main(String[] args) {
+		clientConfig.setConnectionTimeout(50*10000);
 		int port = Integer.parseInt(args[0]);
-		String inputBucket ="";
 		int already_sent_mapper = 0;
 		int already_sent_reducer = 0;
-		String outputBucket = "";
-		String intermediateBucket = "";
 		ServerSocket serverSock = null;
 		Socket s = null;	
 		try
@@ -53,8 +76,14 @@ public class Slave {
 				if(line.startsWith("BUCKET_INFO")){
 					String buckets = line.split(":")[1];
 					inputBucket = buckets.split(",")[0];
+					inBucket = inputBucket.split("#")[0];
+					inPrefix = inputBucket.split("#")[1].equals("empty") ? "": inputBucket.split("#")[1];
 					intermediateBucket = buckets.split(",")[1];
+					interBucket = intermediateBucket.split("#")[0];
+					interPrefix = intermediateBucket.split("#")[1].equals("empty") ? "": intermediateBucket.split("#")[1];
 					outputBucket = buckets.split(",")[2];
+					outBucket = outputBucket.split("#")[0];
+					outPrefix = outputBucket.split("#")[1].equals("empty") ? "": outputBucket.split("#")[1];
 					System.out.println("Bucket info is ........" + line);
 				}
 
@@ -81,7 +110,7 @@ public class Slave {
 				{
 					Socket clientSocket = new Socket(ser_port_hash.get(0).split("#")[1], Integer.parseInt(ser_port_hash.get(0).split("#")[0]));
 					DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
-					if(((mapperCount == mapperFinishedCount) || mapperCount == 0) && already_sent_mapper == 0)
+					if(((mapperCount == Slave.getMapperFinishedCount()) || mapperCount == 0) && already_sent_mapper == 0)
 					{
 						outToServer.writeBytes("SENDING_MAPPER_STATUS:"+ "1"  + ":" + allMapperFileCount +"\n");
 						already_sent_mapper = 1;
@@ -97,7 +126,7 @@ public class Slave {
 				{
 					Socket clientSocket = new Socket(ser_port_hash.get(0).split("#")[1], Integer.parseInt(ser_port_hash.get(0).split("#")[0]));
 					DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
-					if(((reducerCount == reducerFinishedCount) || reducerCount == 0) && already_sent_reducer == 0)
+					if(((reducerCount == Slave.getReducerFinishedCount()) || reducerCount == 0) && already_sent_reducer == 0)
 					{
 						outToServer.writeBytes("SENDING_REDUCER_STATUS:"+ "1" +"\n");
 						already_sent_reducer = 1;
@@ -111,7 +140,9 @@ public class Slave {
 
 				if(line.startsWith("KILL_YOURSELF")){
 					System.out.println("Killing myself.....");
-					break;
+					s.close();
+					serverSock.close();
+					System.exit(0);
 				}
 
 				if(line.startsWith("DO_REDUCE")){
@@ -122,8 +153,6 @@ public class Slave {
 				}
 
 			}
-			s.close();
-			serverSock.close();
 
 		}
 		catch(Exception e)
@@ -138,7 +167,7 @@ public class Slave {
 // Mapper Thread
 class MapperThread extends Thread{
 
-	public static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
+	public static AmazonS3 s3Client = new AmazonS3Client(Slave.clientConfig);
 	String inputMapperPath;
 	String interMapperPath;
 	String mapInfo;
@@ -155,7 +184,8 @@ class MapperThread extends Thread{
 
 		/* Get Keys */
 		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(inputMapperPath);
+				.withBucketName(Slave.inBucket)
+				.withPrefix(Slave.inPrefix);
 		ObjectListing objectListing;     
 		// Get list of all files from bucket and store them in a ArrayList
 		do {
@@ -163,6 +193,8 @@ class MapperThread extends Thread{
 			for (S3ObjectSummary objectSummary : 
 				objectListing.getObjectSummaries()) {
 				String key=objectSummary.getKey();
+				if(key.equals(Slave.inPrefix))
+					continue;
 				bucketKeys.add(key);
 			}
 			listObjectsRequest.setMarker(objectListing.getNextMarker());
@@ -187,7 +219,6 @@ class MapperThread extends Thread{
 
 class MapperTask extends Thread{
 
-	static final Object lock = new Object();
 	Context ctx = null;
 	BufferedReader reader = null;
 	int startIndex;
@@ -228,21 +259,27 @@ class MapperTask extends Thread{
 		/* Read from each key(file) that this server is supposed to read */
 		for(int i=startIndex;i<=endIndex;i++){
 			S3Object s3object = MapperThread.s3Client.getObject(new GetObjectRequest(
-					inputMapPath, MapperThread.bucketKeys.get(i)));
+					Slave.inBucket, MapperThread.bucketKeys.get(i)));
 
 			// Get a range of bytes from an object.
 			GetObjectRequest rangeObjectRequest = new GetObjectRequest(
-					inputMapPath, MapperThread.bucketKeys.get(i));
+					Slave.inBucket, MapperThread.bucketKeys.get(i));
 			rangeObjectRequest.setRange(0, 10);
 
-			GZIPInputStream gzin = null;
-			try {
-				gzin = new GZIPInputStream(s3object.getObjectContent());
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			InputStreamReader decoder = null;
+			if(s3object.getObjectMetadata().getContentType().contains("text"))
+				decoder = new InputStreamReader(s3object.getObjectContent());
+			else
+			{
+				GZIPInputStream gzin = null;
+				try {
+					gzin = new GZIPInputStream(s3object.getObjectContent());
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				decoder = new InputStreamReader(gzin);
 			}
-			InputStreamReader decoder = new InputStreamReader(gzin);
 			reader = new BufferedReader(decoder);
 			String readline ="";
 			try {
@@ -274,9 +311,7 @@ class MapperTask extends Thread{
 		}
 
 		// Increment mapperFinishedCount variable
-		synchronized (lock) {
-			Slave.mapperFinishedCount++;
-		}
+		Slave.incMapperFinishedCount();
 	}
 
 }
@@ -284,7 +319,8 @@ class MapperTask extends Thread{
 //Reducer Thread
 class ReducerThread extends Thread{
 
-	public static AmazonS3 s3RedcerClient = new AmazonS3Client(new ProfileCredentialsProvider());
+	//public static AmazonS3 s3RedcerClient = new AmazonS3Client(new ProfileCredentialsProvider());
+	public static AmazonS3 s3RedcerClient = new AmazonS3Client(Slave.clientConfig);
 	public static HashMap<String, ArrayList<String>> reducerKeyMap = new HashMap<String, ArrayList<String>>();
 	String outputPath ;
 	String inputPath;
@@ -300,7 +336,8 @@ class ReducerThread extends Thread{
 	public void run(){
 		/* Get Keys */
 		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(inputPath);
+				.withBucketName(Slave.interBucket)
+				.withPrefix(Slave.interPrefix);
 		ObjectListing objectListing;     
 		// Get list of all files from bucket and store them in a ArrayList
 		do {
@@ -308,6 +345,8 @@ class ReducerThread extends Thread{
 			for (S3ObjectSummary objectSummary : 
 				objectListing.getObjectSummaries()) {
 				String key=objectSummary.getKey();
+				if(key.equals(Slave.interPrefix))
+					continue;
 				String key_stripped = key.split("_")[1];
 				if(!reducerKeyMap.containsKey(key_stripped))
 				{
@@ -346,9 +385,9 @@ class ReducerThread extends Thread{
 //One reducer
 class ReducerTask extends Thread{
 
-	static final Object lock = new Object();
 	BufferedReader reader = null;
 	List<Text> values = null;
+	Iterable<Text> final_values = null;
 	String key;
 	int rNumber;
 	ArrayList<String> fileList = null;
@@ -372,7 +411,7 @@ class ReducerTask extends Thread{
 		Method method = null;
 		try {
 			c = Class.forName(Slave.className+"$R");
-			method = c.getMethod("reduce",new Class[] { Text.class, List.class, Context.class});
+			method = c.getMethod("reduce",new Class[] { Text.class, Iterable.class, Context.class});
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (NoSuchMethodException e) {
@@ -386,11 +425,11 @@ class ReducerTask extends Thread{
 		/* Read from each key(file) that this server is supposed to read */
 		for(int i=0; i< fileList.size(); i++){
 			S3Object s3object = ReducerThread.s3RedcerClient.getObject(new GetObjectRequest(
-					inputPath, fileList.get(i)));
+					Slave.interBucket, fileList.get(i)));
 
 			// Get a range of bytes from an object.
 			GetObjectRequest rangeObjectRequest = new GetObjectRequest(
-					inputPath, fileList.get(i));
+					Slave.interBucket, fileList.get(i));
 			rangeObjectRequest.setRange(0, 10);
 
 			InputStreamReader decoder = new InputStreamReader(s3object.getObjectContent());
@@ -407,6 +446,7 @@ class ReducerTask extends Thread{
 			}
 			try {
 				s3object.close();
+				reader.close();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -414,7 +454,11 @@ class ReducerTask extends Thread{
 		}
 
 		try {
-			method.invoke(c.newInstance(), new Text(key), values, context);
+			Text[] val= new Text[values.size()];
+			for(int i = 0; i < values.size(); i++)
+				val[i] = values.get(i);
+			final_values = Arrays.asList(val);
+			method.invoke(c.newInstance(), new Text(key), final_values, context);
 		} catch (IllegalAccessException e) {
 			e.printStackTrace();
 		} catch (IllegalArgumentException e) {
@@ -432,9 +476,7 @@ class ReducerTask extends Thread{
 		}
 
 		// Increment reducerFinishedCount variable
-		synchronized (lock) {
-			Slave.reducerFinishedCount++;
-		}
+		Slave.incReducerFinishedCount();
 	}
 
 }
