@@ -1,3 +1,4 @@
+// Authors Karishma Raj, Nephi Calvin, Nikhil Sudireddy, Raghuveer Ramesh
 package org.mapreduce.myhadoop;
 import java.io.BufferedReader;
 import java.io.File;
