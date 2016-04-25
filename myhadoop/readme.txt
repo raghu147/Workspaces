@@ -39,6 +39,7 @@ Make sure u specify the path and implementation class in the Makefile and run th
 
 make pseudo -- creates output folder out containing part file with the output
 
-
+CLEAN:
+make remove -- reverts to original folder structure
 
 
