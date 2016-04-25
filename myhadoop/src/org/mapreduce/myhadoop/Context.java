@@ -9,6 +9,9 @@ import java.util.HashMap;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.transfer.TransferManager;
 
+/*
+ * Custom Classes
+ */
 class Text {
 
 	String val;
@@ -57,10 +60,6 @@ class Job {
 		return null;
 	}
 
-	/*public void setJarByClass(Class<Alice> class1) {
-
-	}*/
-
 	public <M> void setMapperClass(Class<M> class1) {
 
 	}
@@ -91,27 +90,31 @@ class Context {
 	static final int MAPPER_TYPE = 1;
 	static final int REDUCER_TYPE = 2;
 	Text key;
-	String outputBucketName;
 
-	public Context(int mrNumber,int contextType,Text key,String outputBucketName) {
+	public Context(int mrNumber,int contextType,Text key) {
 
 		this.reducerData = "";
 		this.mrNumber = mrNumber;
 		this.contextType = contextType;
 		this.key = key;
-		this.outputBucketName = outputBucketName;
 		this.mapperData = new HashMap<String, ArrayList<String>>();
 	}
 
+	/*
+	 * This is called for every context.write() in mapper, reducer
+	 */
 	public void write(Text mrkey, Text val) {
 
 
 		if(contextType == REDUCER_TYPE){
+			// Reducer
 			reducerData = key.toString() + ", " + val.toString();
 		}
 		else{
+			// Mapper
 			String key1 = mrkey.toString();
 			String val1 = val.toString();
+			// Create HashMap based on Key
 			if(mapperData.containsKey(key1))
 			{
 				ArrayList<String> value = mapperData.get(key1);
@@ -127,16 +130,21 @@ class Context {
 		}
 	}
 
+	/*
+	 * This is called at the end of respective mapper, reducer
+	 * Used to create a final Key File for both mapper, reducer
+	 */
 	public void writeToDisk(int mrNumber) throws IOException {
 
 
 		if(contextType == REDUCER_TYPE){
+			// Reducer
 			TransferManager rtx = new TransferManager(
 					new ProfileCredentialsProvider());
 
 			File partFile = null;
 			try {
-
+				// New part file for each reducer Key
 				partFile = new File("reducer-temp/part-r-"+key);
 
 				if (!partFile.exists()) {
@@ -161,6 +169,7 @@ class Context {
 		}
 		else
 		{
+			// Mapper
 			TransferManager mtx = new TransferManager(
 					new ProfileCredentialsProvider());
 			// Create separate file for each key
@@ -201,13 +210,17 @@ class Context {
 				Slave.allMapperFileCount += mapperData.size();
 			}
 		}
-		
-		
+
+
 	}
-	
-	
-public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedException{
-		
+
+
+	/*
+	 * This is used for pseudo mode
+	 * Writing the final files onto local directory
+	 */
+	public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedException{
+
 		if(contextType == MAPPER_TYPE){
 
 			// Create separate file for each key
@@ -232,14 +245,13 @@ public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedExcept
 				bw.close();
 				fw.close();
 			}	
-			
-				Pseudo.mapperInc();
-				
-			
+
+			Pseudo.mapperInc();
+
 			System.out.println("Finished mapper:"+mrNumber);
 		}
 		else{
-			
+
 			File partFile = null;
 			try {
 
@@ -256,15 +268,13 @@ public void writeToLocalDisk(int mrNumber) throws IOException, InterruptedExcept
 
 				bw.close();
 				fw.close();
-				
-				//System.out.println("Finished Reducer:"+mrNumber);
 
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			
-				Pseudo.reducerInc();
+
+			Pseudo.reducerInc();
 		}
-		
+
 	}
 }

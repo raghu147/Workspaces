@@ -1,3 +1,5 @@
+package org.mapreduce.myhadoop;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataOutputStream;
@@ -13,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -24,8 +27,12 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.transfer.TransferManager;
 
 public class Master {
-	static AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
+	public static ClientConfiguration clientConfig = new ClientConfiguration();
+	static AmazonS3 s3Client = null;
 
+	/*
+	 * Split the bucket name to take the input from the final sub directory
+	 */
 	public static String splitBucketInfo(String bucket)
 	{
 		String truncatedBucketString = bucket.substring(5);
@@ -54,9 +61,12 @@ public class Master {
 
 	public static void main(String arg[]) throws UnknownHostException, IOException, InterruptedException
 	{
+		clientConfig.setConnectionTimeout(50*10000);
+		s3Client = new AmazonS3Client(clientConfig);
 		// Arguments: ClassName totalMachines input intermediate output masterport port1 port2 ....
 		String classToExecute = arg[0];
 		int numOfMachines = Integer.parseInt(arg[1]);
+		// Parsing the bucket names(Get the bucket name, its prefix)
 		String inputBucketName = splitBucketInfo(arg[2]);
 		String inputBucket = inputBucketName.split("#")[0];
 		String inputPrefix = inputBucketName.split("#")[1].equals("empty") ? "": inputBucketName.split("#")[1];
@@ -75,8 +85,7 @@ public class Master {
 		String server_port_dns="";
 
 		double totalSize = 0.0;
-		//int blockSize = 128;
-		int blockSize = 10;
+		int BLOCKSIZE = 128;
 
 		int totalNumOfMappers = 0;
 		int factor = 0;
@@ -88,7 +97,7 @@ public class Master {
 		int mappersToRead = 0;
 		HashMap<Integer, String> slaveInfo = new HashMap<Integer, String>();
 
-		// Read the DNS file, and store it in a string(contains dns of all machines)
+		// Read the DNS file, and store it in a string(contains DNS of all machines)
 		try(BufferedReader br = new BufferedReader(new FileReader(dns_file_path))){
 			String line;
 			while ((line = br.readLine()) != null) {
@@ -105,8 +114,8 @@ public class Master {
 			serverPortList.add(Integer.parseInt(arg[i]));
 		}
 
-		// Copy a combination of server number, server port and server dns into a string
-		// 0=localhost#8890,1=localhost#8891
+		// Copy a combination of server number, server port and server DNS into a string
+		// Example: 0=localhost#8890,1=localhost#8891
 		for(int i = 0; i <= numOfMachines; i++)
 		{
 			server_port_dns = server_port_dns + i + "=" + serverPortList.get(i) + "#"+serverDNSList[i] + ",";
@@ -119,8 +128,9 @@ public class Master {
 		//----------------------------------------------------------------------------------------
 
 
-		// Read S3 bucket to calculate size and number of files
-
+		/*
+		 *  Read S3 bucket to calculate size and number of files
+		 */
 
 		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
 				.withBucketName(inputBucket)
@@ -141,10 +151,10 @@ public class Master {
 		} while (objectListing.isTruncated());
 
 		// Calculate number of mappers per machine
-		if(totalSize < blockSize)
+		if(totalSize < BLOCKSIZE)
 			totalNumOfMappers = 1;
 		else
-			totalNumOfMappers = (int)totalSize / blockSize;
+			totalNumOfMappers = (int)totalSize / BLOCKSIZE;
 
 		file_factor = file_count / totalNumOfMappers;
 		if(file_factor==0)
@@ -152,7 +162,12 @@ public class Master {
 
 		factor = totalNumOfMappers / numOfMachines;
 		diff = totalNumOfMappers - (factor * numOfMachines);
-		// Store mapper per machine info in a hashmap
+
+		/*
+		 *  Store mappers per machine info in a Hashmap
+		 *  Also store the start and end index of the files,
+		 *  that the mappers are expected to read.
+		 */
 		startFileIndex = 0;
 		if(file_factor==0)
 			endFileIndex=0;
@@ -163,6 +178,7 @@ public class Master {
 		{
 			if(i == numOfMachines)
 			{
+				// This is for the last machine
 				int mappers = (factor + diff);
 				String map_info = "";
 				for(int j = 1; j<=mappers; j++)
@@ -208,7 +224,7 @@ public class Master {
 		for(int i = 1;i  <  serverPortList.size(); i++)
 			dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "SERVER_PORT_DNS_LIST:"+server_port_dns);
 
-		// Broadcast slave info to all slaves
+		// Broadcast slave info(Mapper Info) to all slaves
 		for(int i = 1;i  <  serverPortList.size(); i++)
 		{
 			if(slaveInfo.get(i) != null)
@@ -219,6 +235,7 @@ public class Master {
 
 		ServerSocket serverSock = null;
 		Socket s = null;
+
 		// Keep Listening to all the slaves to check if mappers finished their jobs
 		try
 		{
@@ -285,6 +302,7 @@ public class Master {
 						mrKeys.add(key_value);
 				}
 				listObjectsRequestIntermediate.setMarker(objectListingIntermediate.getNextMarker());
+				System.out.println("MappersToRead, Keys read: " + mappersToRead + "," + m_count);
 			} while (objectListingIntermediate.isTruncated());
 		}while(mappersToRead!=m_count);
 
@@ -312,12 +330,17 @@ public class Master {
 		else
 			reducerDiff = allKeys - (reducersPerMachine * numOfMachines);
 
+		/*
+		 * Calculate the number of reducers per machine and
+		 * the Key Files they have to read.
+		 */
 		for(int i = 1; i<= numOfMachines;i++)
 		{
 			if(reducer_number < allKeys)
 			{
 				if(i == numOfMachines)
 				{
+					// This is for last machine
 					int reducers = (reducersPerMachine + reducerDiff);
 					String reducer_info = "";
 					for(int j = 1; j<=reducers; j++)
@@ -341,15 +364,18 @@ public class Master {
 			}
 		}
 
-		// Start Reducer phase
+		/*
+		 *  Start Reducer phase
+		 *  Send the reducer information to all the machines
+		 */
 		for(int i = 1;i  <  serverPortList.size(); i++)
 		{
 			if(!(slaveReducerInfo.get(i) == null))
-				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+slaveReducerInfo.get(i));
+				dispatchSendMessage(serverDNSList[i], serverPortList.get(i), "DO_REDUCE:"+slaveReducerInfo.get(i)+":"+classToExecute);
 		}
 
 
-		// Keep Listening to all the slaves to check if mappers finished their jobs
+		// Keep Listening to all the slaves to check if reducers finished their jobs
 
 		try
 		{
@@ -416,7 +442,6 @@ public class Master {
 		 * Read from each key part file and create a single part file 
 		 */ 
 
-
 		TransferManager partTX = new TransferManager( new ProfileCredentialsProvider());
 
 		// Create a combined part file in local
@@ -458,7 +483,7 @@ public class Master {
 		bw.close();
 		fw.close();
 
-		// Upload the part File into s3 bucket
+		// Upload the final part File into s3 bucket
 		partTX.upload(outputBucket, combinedPartFile.getName()+".txt", combinedPartFile).isDone();
 		System.out.println("Finished all Phases.....Congratulations.....");
 		Thread.sleep(2000);
