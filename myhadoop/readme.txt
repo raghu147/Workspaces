@@ -24,6 +24,19 @@ NOTES -
 - It creates the required EC-2 Private KEY, EC-2 Security Group and adds required Rules to those security groups
 
 
+SAMPLE RUN:
+
+EC2:
+
+./start-cluster.sh 2 -- Starts two EC2 instances 
+./my-mapreduce.sh Alice s3://Alice6240 s3://output6240 -- Pass the implementation class, input bucket, output bucket
+./stop.sh -- stop instances
+
+PSEUDO:
+
+Make sure u specify the path and implementation class in the Makefile and run the following command. 
+
+make pseudo -- creates output folder out containing part file with the output
 
 
 

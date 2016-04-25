@@ -4,7 +4,7 @@ make run
 
 aws ec2 create-security-group --group-name sg9 --description "My security2 group"
 
-aws ec2 authorize-security-group-ingress --group-name sg9 --protocol tcp --port 0-65535 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-name sg9 --protocol tcp --port 17000-17025 --cidr 0.0.0.0/0
 
 aws ec2 authorize-security-group-ingress --group-name sg9 --protocol tcp --port 22 --cidr 0.0.0.0/0
 

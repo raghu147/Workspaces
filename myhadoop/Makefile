@@ -1,17 +1,33 @@
 machines=1
-master_port=17000
-port1=17321
-port2=17322
-class=org.mapreduce.myhadoop.Alice
-output=outputnikcs6240
+master_port=19000
+port1=17328
+
+class=MissedConnections
+output=s3://output6240
 #input=testingnikcs6240
-input=airline6240
-intermediate=internikcs6240
+input=s3://airline6240
+intermediate=s3://testint6240
 pinp=inp
 pintermediate=int
 pout=out
 
 run: clean compile ant
+
+ 
+remove:
+	rm -f *.class
+	rm -rf lib	
+	rm -rf mapper-temp
+	rm -rf reducer-temp
+	rm -rf $(pintermediate)
+	rm -rf $(pout)
+	rm -f key.pem
+	rm -f instance.txt
+	rm -f publicDNS.txt
+	rm -rf bin
+	rm -rf dist
+	
+
 
  
 clean:
@@ -50,12 +66,12 @@ ant:
 
 #PSEUDO
 master:
-	java -cp dist/framework.jar org.mapreduce.myhadoop.Master $(class) $(machines) $(input) $(intermediate) $(output) $(master_port) $(port1)
+	java -cp dist/framework.jar org.mapreduce.myhadoop.Master org.mapreduce.myhadoop.$(class) $(machines) $(input) $(intermediate) $(output) $(master_port) $(port1)
 slave:
 	gnome-terminal -x bash -c "java -cp dist/framework.jar org.mapreduce.myhadoop.Slave $(port1)" 
+pseudo:	clean 
 
-pseudo:
-	java -cp dist/framework.jar org.mapreduce.myhadoop.Pseudo $(class) $(pinp) $(pintermediate) $(pout)
+	java -cp dist/framework.jar org.mapreduce.myhadoop.Pseudo org.mapreduce.myhadoop.$(class) $(pinp) $(pintermediate) $(pout)
 	cat $(pout)/* >> partfile
 	rm $(pout)/* 
 	mv partfile $(pout)
