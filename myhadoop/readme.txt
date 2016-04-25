@@ -13,8 +13,8 @@ This assignment submission contains
 Mandatory Instructions-
 
 1. Make sure you run "aws configure" and configure your aws command line tool to have JSON output
-2. Put your AWS credentials(ususally located in ~/.aws/ folder)  in a file called credentials and place it along with the source files
-   Make sure file it is called 'credentials' ( no extensions)
+2. Put your AWS credentials(ususally located in ~/.aws/ folder)  in a file called credentials and place it along with the root directory files.
+   Make sure file is called 'credentials' ( no extensions)
 3. Make sure you have ant setup
 4. run start-cluster.sh, sort.sh and stop.sh with SUDO
 
