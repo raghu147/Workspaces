@@ -69,7 +69,7 @@ master:
 	java -cp dist/framework.jar org.mapreduce.myhadoop.Master org.mapreduce.myhadoop.$(class) $(machines) $(input) $(intermediate) $(output) $(master_port) $(port1)
 slave:
 	gnome-terminal -x bash -c "java -cp dist/framework.jar org.mapreduce.myhadoop.Slave $(port1)" 
-pseudo:	clean 
+pseudo:	clean ant
 
 	java -cp dist/framework.jar org.mapreduce.myhadoop.Pseudo org.mapreduce.myhadoop.$(class) $(pinp) $(pintermediate) $(pout)
 	cat $(pout)/* >> partfile
