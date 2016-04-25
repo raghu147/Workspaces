@@ -29,7 +29,8 @@ SAMPLE RUN:
 EC2:
 
 ./start-cluster.sh 2 -- Starts two EC2 instances 
-./my-mapreduce.sh Alice s3://Alice6240 s3://output6240 -- Pass the implementation class, input bucket, output bucket
+./my-mapreduce.sh <Implementation class> s3://Alice6240 s3://output6240 -- Pass the implementation class, input bucket, output bucket
+where Implementation class = Alice/Median/ClusterAnalysis/MissedConnections/Prediction/Routing
 ./stop.sh -- stop instances
 
 PSEUDO:
